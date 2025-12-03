@@ -24,6 +24,7 @@ install.packages(c("matrixStats", "dplyr"))
 
 Data Download Instructions
 Step 1: Set Up Directory Structure
+
 # Create project directories
 dir.create("00_Raw_Data", showWarnings = FALSE)
 dir.create("01_Processed_Data", showWarnings = FALSE)
@@ -60,6 +61,7 @@ saveRDS(mutation, "COAD_mutations.rds")
 cat("Mutation data:", nrow(mutation), "mutations\n")
 Expected output: ~85,000–250,000 mutations
 Step 4: Download Methylation Data (~45–60 minutes)
+
 # Query methylation data (450K platform)
 query_meth <- GDCquery(
     project = "TCGA-COAD",
@@ -71,7 +73,7 @@ query_meth <- GDCquery(
 # Download (large file, ~8 GB)
 GDCdownload(query_meth, method = "api", directory = "GDC_downloads")
 
-# Prepare into usable format (10–20 minutes)
+# Prepare into usable format
 methylation <- GDCprepare(query_meth, directory = "GDC_downloads")
 
 # Save
