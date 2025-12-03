@@ -1,2 +1,2 @@
 # CRC-methylation-subtyping
-Unsupervised consensus clustering of TCGA-COAD DNA methylation data to identify colorectal cancer subtypes.
+Identifying colorectal cancer subtypes through unsupervised DNA methylation clustering — a proof-of-concept for objective biomarker discovery
