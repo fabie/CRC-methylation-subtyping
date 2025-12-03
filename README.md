@@ -256,7 +256,6 @@ This proof-of-concept establishes the methodological foundation. Next steps incl
 - Validation on independent veteran cohorts
 - Integration with exposure history data
 - Development of a classification model for prospective use
-- Contribute to possibly existing on-going researchs from the U.S government Dpt of Veteran Affairs
 
 ---
 
