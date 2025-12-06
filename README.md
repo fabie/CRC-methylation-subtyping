@@ -191,29 +191,29 @@ Discovered subtypes show significant associations with established molecular mar
 ## Project Structure
 
 ```
-├── README.md
-├── LICENSE
-├── .gitignore
-├── renv.lock
+├── README.md                        # main landing page for the project and repository
+├── LICENSE                          # MIT licence for academic use
+├── .gitignore                       # R context, which files to ignore and not track
+├── renv.lock                        # R packages management
 │
 ├── data/
-│   └── README.md                    # Instructions for TCGA data download
+│   └── README.md                    # instructions for TCGA data download
 │
 ├── analysis/
 │   ├── 01_data_acquisition.Rmd      # TCGA download and initial processing
 │   ├── 02_quality_control.Rmd       # 7-step QC pipeline
-│   ├── 03_consensus_clustering.Rmd
-│   ├── 04_internal_validation.Rmd
-│   └── 05_external_validation.Rmd
+│   ├── 03_consensus_clustering.Rmd  # self-explanatory (ref. main README file)
+│   ├── 04_internal_validation.Rmd   # self-explanatory (ref. main README file)
+│   └── 05_external_validation.Rmd   # self-explanatory (ref. main README file)
 │
 ├── R/
-│   └── helper_functions.R           # Reusable utility functions
+│   └── helper_functions.R           # reusable utility functions
 │
 ├── output/
-│   └── figures/
+│   └── figures/                     # pertinent plots and figures
 │
 └── docs/
-    └── supplementary_materials/     # Literature references
+    └── supplementary_materials/     # literature references
 ```
 
 ---
