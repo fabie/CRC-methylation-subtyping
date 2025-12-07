@@ -1,0 +1,25 @@
+## External Validation: Clinical Features
+
+| Feature | Cluster 1 | Cluster 2 | Cluster 3 | P-value | Significance |
+|---------|-----------|-----------|-----------|---------|--------------|
+| Age at Diagnosis (years) | 61.2 ± 13.5 | 69.4 ± 12.7 | 67.1 ± 12.3 | 8.23e-05 | *** |
+| Gender (% Male) | 51.5 | 50.0 | 55.3 | 0.540 | ns |
+| Stage I (%) | 7.4 | 21.2 | 18.5 | 0.0065 | ** |
+| Stage II (%) | 37.9 | 43.9 | 38.7 | 0.0065 | ** |
+| Stage III (%) | 29.5 | 28.8 | 31.9 | 0.0065 | ** |
+| Stage IV (%) | 25.3 | 6.1 | 10.9 | 0.0065 | ** |
+
+**Statistical significance: ns = not significant, \*p<0.05, \*\*p<0.01, \*\*\*p<0.001*
+
+**Clinical facts:
+- Stage I is localized early
+- Stage II is locally advanced
+- Stage III has reached regional lymph nodes
+- Stage IV has metastased ( or spread to distant organs). Palliative care but typically incurable.
+
+**Key Findings:**
+- Cluster 1 patients are significantly younger (mean 61.2 years). Despite genetic risk, shows more Stage IV; may reflect younger onset or more aggressive biology
+- Cluster 1 has highest Stage IV rate (25.3%) — More aggressive disease
+- Cluster 2 has lowest Stage IV (6.1%) — Often detected earlier due to distinct pathology and screening. Caught earlier has better prognosis. 
+- Gender is balanced across clusters (not significant)
+
