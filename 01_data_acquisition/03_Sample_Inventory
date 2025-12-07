@@ -1,0 +1,59 @@
+---
+title: "R How Many Samples Do We Have"
+author: "Fabie Van Cappel"
+date: "November 2025"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    number_sections: true
+    keep_tex: true
+---
+
+```{r}
+
+# Library: here
+#readRDS(here::here("clinical", "COAD_clinical.rds")) # for portability
+
+# setwd() is not portable
+# setwd("/../TCGA_COAD_Thesis/00_Raw_Data") # your directory path
+
+# Load all data
+clinical <- readRDS("clinical/COAD_clinical.rds")
+mutation <- readRDS("mutation/COAD_mutation.rds")
+methylation <- readRDS("methylation/COAD_methylation_raw.rds")
+
+cat("════════════════════════════════════\n")
+cat("SAMPLE COUNTS ACROSS DATASETS\n")
+cat("════════════════════════════════════\n\n")
+
+# Clinical
+cat("Clinical data:\n")
+cat("  Total patients:", nrow(clinical), "\n\n")
+
+# Mutation
+cat("Mutation data:\n")
+cat("  Unique samples:", length(unique(mutation$Tumor_Sample_Barcode)), "\n\n")
+
+# Methylation
+cat("Methylation data:\n")
+cat("  Total samples:", ncol(methylation), "\n\n")
+
+# IMPORTANT question: OVERLAP?
+cat("════════════════════════════════════════════\n")
+cat("KEY QUESTION: How many samples have ALL THREE?\n")
+cat("════════════════════════════════════════════\n\n")
+
+# Extract sample IDs
+clinical_ids <- clinical$bcr_patient_barcode
+mutation_ids <- unique(substr(mutation$Tumor_Sample_Barcode, 1, 12))  # Convert to patient IDs
+methylation_ids <- substr(colnames(methylation), 1, 12)  # Convert to patient IDs
+
+# Find overlap
+all_three <- Reduce(intersect, list(clinical_ids, mutation_ids, methylation_ids))
+
+cat("Samples with clinical + mutation + methylation:", length(all_three), "\n\n")
+
+cat("ACTUAL Analysis!\n")
+
+```
