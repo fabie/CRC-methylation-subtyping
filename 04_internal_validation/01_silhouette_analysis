@@ -1,0 +1,298 @@
+---
+title: "Internal Validation - Silhouette Analysis"
+author: "Fabie Van Cappel"
+date: "2025-11-18"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+toc: true
+number_sections: true
+keep_tex: true
+---
+
+
+```{r}
+################################################################################
+# INTERNAL VALIDATION  & CLUSTER VISUALIZATION
+################################################################################
+
+#setwd() is not portable
+#setwd("/../TCGA_COAD_Thesis")
+
+
+# Load required packages
+# Lib: cluster for silhouette analysis
+# Lib: Rtsne for t-Distributed Stochastic Neighbor Embedding for t-SNE
+# Lib: ggplot2 for visual graphic
+library(cluster)      
+library(Rtsne)       
+library(ggplot2)     
+
+# Create output directories
+dir.create("03_Internal_Validation", recursive = TRUE, showWarnings = FALSE)
+dir.create("03_Internal_Validation/plots", recursive = TRUE, showWarnings = FALSE)
+
+################################################################################
+# Load Data
+################################################################################
+
+cat("Loading data...\n")
+meth_10k <- readRDS("00_Raw_Data/01_Processed_Data/methylation_10k_for_clustering.rds")
+all_results <- readRDS("02_Clustering_Results/consensus_results_complete.rds")
+clusters_k3 <- read.csv("02_Clustering_Results/final_clusters_k3.csv")
+
+# Extract k=3 cluster assignments
+cluster_vec <- clusters_k3$cluster
+names(cluster_vec) <- clusters_k3$sample_id
+
+cat("Samples:", ncol(meth_10k), "\n")
+cat("Probes:", nrow(meth_10k), "\n")
+cat("Clusters:", paste(table(cluster_vec), collapse=", "), "\n\n")
+
+################################################################################
+# 1. PCA Visualization
+################################################################################
+
+cat("Running PCA...\n")
+
+# Transpose for PCA (samples as rows)
+meth_t <- t(meth_10k)
+
+# Run PCA
+pca_result <- prcomp(meth_t, center = TRUE, scale. = FALSE)
+
+# Extract PC scores
+pca_data <- data.frame(
+  PC1 = pca_result$x[,1],
+  PC2 = pca_result$x[,2],
+  PC3 = pca_result$x[,3],
+  Cluster = factor(cluster_vec)
+)
+
+# Variance
+var_explained <- round(100 * pca_result$sdev^2 / sum(pca_result$sdev^2), 1)
+
+# Plot PC1 vs PC2
+png("03_Internal_Validation/plots/pca_clusters_k3.png",
+    width = 10, height = 8, units = "in", res = 300)
+plot(pca_data$PC1, pca_data$PC2,
+     col = c("#E69F00", "#56B4E9", "#009E73")[pca_data$Cluster],
+     pch = 19, cex = 1.5,
+     xlab = paste0("PC1 (", var_explained[1], "% variance)"),
+     ylab = paste0("PC2 (", var_explained[2], "% variance)"),
+     main = "PCA of Methylation Clusters (k=3)")
+legend("topright", 
+       legend = paste0("Cluster ", 1:3, " (n=", table(cluster_vec), ")"),
+       col = c("#E69F00", "#56B4E9", "#009E73"),
+       pch = 19, pt.cex = 2, cex = 1.2)
+grid()
+dev.off()
+
+cat("✅ PCA plot saved\n")
+
+################################################################################
+# 2. t-SNE Visualization
+################################################################################
+
+cat("Running t-SNE (this may take a few minutes)...\n")
+
+set.seed(42)
+tsne_result <- Rtsne(meth_t, 
+                     dims = 2, 
+                     perplexity = 30,
+                     max_iter = 1000,
+                     check_duplicates = FALSE)
+
+tsne_data <- data.frame(
+  tSNE1 = tsne_result$Y[,1],
+  tSNE2 = tsne_result$Y[,2],
+  Cluster = factor(cluster_vec)
+)
+
+png("03_Internal_Validation/plots/tsne_clusters_k3.png",
+    width = 10, height = 8, units = "in", res = 300)
+plot(tsne_data$tSNE1, tsne_data$tSNE2,
+     col = c("#E69F00", "#56B4E9", "#009E73")[tsne_data$Cluster],
+     pch = 19, cex = 1.5,
+     xlab = "t-SNE Dimension 1",
+     ylab = "t-SNE Dimension 2",
+     main = "t-SNE of Methylation Clusters (k=3)")
+legend("topright", 
+       legend = paste0("Cluster ", 1:3, " (n=", table(cluster_vec), ")"),
+       col = c("#E69F00", "#56B4E9", "#009E73"),
+       pch = 19, pt.cex = 2, cex = 1.2)
+grid()
+dev.off()
+
+cat("✅ t-SNE plot saved\n")
+
+################################################################################
+# 3. Silhouette Analysis
+################################################################################
+
+cat("Calculate Silhouette Scores...\n")
+
+# Distance matrix (use subset for speed if needed)
+dist_matrix <- dist(meth_t, method = "euclidean")
+
+# Silhouette analysis
+sil_result <- silhouette(cluster_vec, dist_matrix)
+
+# Summary statistics
+sil_summary <- summary(sil_result)
+mean_sil <- mean(sil_result[,3])
+
+cat("Mean silhouette width:", round(mean_sil, 3), "\n")
+cat("By cluster:\n")
+for(i in 1:3) {
+  cluster_sil <- sil_result[cluster_vec == i, 3]
+  cat("  Cluster", i, ":", round(mean(cluster_sil), 3), "\n")
+}
+
+# Silhouette plot
+png("03_Internal_Validation/plots/silhouette_k3.png",
+    width = 10, height = 8, units = "in", res = 300)
+plot(sil_result, 
+     col = c("#E69F00", "#56B4E9", "#009E73"),
+     border = NA,
+     main = paste0("Silhouette Plot (k=3)\nAverage width: ", round(mean_sil, 3)))
+abline(v = mean_sil, col = "red", lty = 2, lwd = 2)
+dev.off()
+
+cat("✅  Silhouette plot saved\n")
+
+################################################################################
+# 4. Manhattan L1 and Correlation Analyzes
+################################################################################
+
+# Euclidean (from above)
+dist_euclidean <- dist(meth_t, method = "euclidean")
+sil_euclidean <- silhouette(cluster_vec, dist_euclidean)
+mean_sil_euclidean <- mean(sil_euclidean[,3])
+
+# Manhattan (L1)
+cat("Calculating Manhattan distance...\n")
+dist_manhattan <- dist(meth_t, method = "manhattan")
+sil_manhattan <- silhouette(cluster_vec, dist_manhattan)
+mean_sil_manhattan <- mean(sil_manhattan[,3])
+
+# Correlation-based (bonus - highly recommended for methylation)
+cat("Calculating correlation distance...\n")
+cor_matrix <- cor(meth_10k)  # correlation between samples (columns)
+dist_correlation <- as.dist(1 - cor_matrix)
+sil_correlation <- silhouette(cluster_vec, dist_correlation)
+mean_sil_correlation <- mean(sil_correlation[,3])
+
+################################################################################
+# 5. Comparison between Euclidean, Mnahattan L1, and Correlation Analyzes
+################################################################################
+
+# Summary comparison
+
+writeLines(c(
+  "╔════════════════════════════════════════╗",
+  "║   Comparison between Distance Metrics  ║",
+  "╚════════════════════════════════════════╝"
+))
+
+
+
+cat("Euclidean:    ", round(mean_sil_euclidean, 3), "\n")
+cat("Manhattan:    ", round(mean_sil_manhattan, 3), "\n")
+cat("Correlation:  ", round(mean_sil_correlation, 3), "\n")
+cat("\n")
+
+# By_cluster comparison
+comparison_df <- data.frame(
+  Cluster = 1:3,
+  Euclidean = tapply(sil_euclidean[,3], cluster_vec, mean),
+  Manhattan = tapply(sil_manhattan[,3], cluster_vec, mean),
+  Correlation = tapply(sil_correlation[,3], cluster_vec, mean)
+)
+
+cat("By cluster:\n")
+print(round(comparison_df, 3))
+
+# Save comparison
+write.csv(comparison_df, 
+          "03_Internal_Validation/silhouette_distance_comparison.csv",
+          row.names = FALSE)
+
+################################################################################
+# 6. Comparative Visualization
+################################################################################
+
+# Side-by-side silhouette plots
+png("03_Internal_Validation/plots/silhouette_comparison.png",
+    width = 16, height = 6, units = "in", res = 300)
+
+par(mfrow = c(1, 3))
+
+# Euclidean
+plot(sil_euclidean, 
+     col = c("#E69F00", "#56B4E9", "#009E73"),
+     border = NA,
+     main = paste0("Euclidean Distance\nMean: ", round(mean_sil_euclidean, 3)))
+abline(v = mean_sil_euclidean, col = "red", lty = 2, lwd = 2)
+
+# Manhattan
+plot(sil_manhattan, 
+     col = c("#E69F00", "#56B4E9", "#009E73"),
+     border = NA,
+     main = paste0("Manhattan Distance\nMean: ", round(mean_sil_manhattan, 3)))
+abline(v = mean_sil_manhattan, col = "red", lty = 2, lwd = 2)
+
+# Correlation
+plot(sil_correlation, 
+     col = c("#E69F00", "#56B4E9", "#009E73"),
+     border = NA,
+     main = paste0("Correlation Distance\nMean: ", round(mean_sil_correlation, 3)))
+abline(v = mean_sil_correlation, col = "red", lty = 2, lwd = 2)
+
+par(mfrow = c(1, 1))
+dev.off()
+
+cat("✅   Distance comparison plots saved\n")
+
+################################################################################
+# 7. Barplot comparison
+################################################################################
+
+png("03_Internal_Validation/plots/silhouette_metric_barplot.png",
+    width = 10, height = 6, units = "in", res = 300)
+
+metrics <- c(mean_sil_euclidean, mean_sil_manhattan, mean_sil_correlation)
+names(metrics) <- c("Euclidean", "Manhattan", "Correlation")
+
+barplot(metrics,
+        col = c("#4477AA", "#66CCEE", "#228833"),
+        ylim = c(0, max(metrics) * 1.2),
+        main = "Silhouette Width by Distance Metric",
+        ylab = "Mean Silhouette Width",
+        border = "black")
+
+# Add value labels
+for(i in 1:3) {
+  text(i * 1.2 - 0.6, metrics[i] + 0.02, 
+       round(metrics[i], 3), 
+       font = 2, cex = 1.2)
+}
+
+# Add interpretation line
+abline(h = 0.5, col = "red", lty = 2, lwd = 2)
+text(2, 0.52, "Good separation threshold (>0.5)", pos = 3, col = "red")
+
+dev.off()
+
+cat("✅   Metric comparison barplot saved\n")
+
+################################################################################
+# 8. Cross Examination
+################################################################################
+
+# Which samples have negative silhouette in correlation?
+neg_samples <- which(sil_correlation[,3] < 0)
+neg_cluster <- cluster_vec[neg_samples]
+table(neg_cluster)
+
+```
