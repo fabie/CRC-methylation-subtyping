@@ -257,7 +257,7 @@ CRC-methylation-subtyping/
 
 ---
 ## Conclusion
-This proof-of-concept demonstrates that methylation-based clustering could provide objective biomarkers for veteran disability claims, offering molecular evidence where subjective clinical assessments currently fall short. Future work will apply this methodology to exposure-related cancers in veteran populations. Subsequently, we can extend this study to the PACT Act, a landmark for veterans who have been exposed to burn pits, Agent Orange, and other toxins, adding over 20 new presumptive conditions - like specific cancers (brain, G, kidney, lymphoma, etc), respiratory illnesses (athma, COPD, chronic bronchitis, sinusitis, etc), and Monoclonal Gammapathy of Undetermined Significance (MGUS) - for Vietnam, Gulf War, and Post-9/11 Veterans, requiring toxic exposure screenings.
+This proof-of-concept demonstrates that methylation-based clustering could provide objective biomarkers for veteran disability claims, offering molecular evidence where subjective clinical assessments currently fall short. Future work will apply this methodology to exposure-related cancers in veteran populations. Subsequently, we can extend this study to the PACT Act, a milestone for veterans who have been exposed to burn pits, industrial chemical, smokes, dust from sandstorms, abestos, contaminated water, Agent Orange, and other toxins, adding over twenty new presumptive conditions - like specific cancers (brain, G, kidney, lymphoma, etc), respiratory illnesses (asthma, COPD, chronic bronchitis, sinusitis, etc), and Monoclonal Gammapathy of Undetermined Significance (pre-cancerous to myeloma, amyloidosis, Waldenström's macroglobulinemia) - for Vietnam, Gulf War, and Post-9/11 Veterans.
 
 
 ## Future Directions
@@ -266,7 +266,8 @@ This proof-of-concept establishes the methodological foundation. Next steps incl
 - Validation on independent veteran cohorts
 - Integration with exposure history data
 - Development of a classification model for prospective use
-- Will contribute to possibly existing on-going researchs from the U.S government Dept of Veterans Affairs.
+- Early diagnosis for cure and remediation to improve prognosis
+- Will contribute to possibly existing on-going researchs from the U.S. government Dept of Veterans Affairs.
 
 ---
 
