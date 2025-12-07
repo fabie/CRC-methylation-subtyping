@@ -1,0 +1,375 @@
+---
+title: "Internal Validation - Investigate Ambiguous Samples"
+author: "Fabie Van Cappel"
+date: "2025-11-18"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+toc: true
+number_sections: true
+keep_tex: true
+---
+
+
+```{r}
+
+#setwd() is not portable
+#setwd("/../TCGA_COAD_Thesis")
+
+
+# Load required packages
+# Lib: cluster for silhouette analysis
+# Lib: Rtsne for t-Distributed Stochastic Neighbor Embedding for t-SNE
+# Lib: ggplot2 for visual graphic
+library(cluster)      
+library(Rtsne)       
+library(ggplot2) 
+
+################################################################################
+# DEEP DIVE: Ambiguous/Misassigned Samples
+################################################################################
+
+################################################################################
+# 1. Identify Problematic Samples
+################################################################################
+
+# Extract silhouette values for each sample
+sil_df <- data.frame(
+  sample_id = names(cluster_vec),
+  cluster = cluster_vec,
+  sil_euclidean = sil_euclidean[,3],
+  sil_manhattan = sil_manhattan[,3],
+  sil_correlation = sil_correlation[,3]
+)
+
+# Flag samples with issues
+sil_df$any_negative <- (sil_df$sil_euclidean < 0 | 
+                        sil_df$sil_manhattan < 0 | 
+                        sil_df$sil_correlation < 0)
+
+sil_df$all_negative <- (sil_df$sil_euclidean < 0 & 
+                        sil_df$sil_manhattan < 0 & 
+                        sil_df$sil_correlation < 0)
+
+sil_df$mean_sil <- rowMeans(sil_df[, c("sil_euclidean", "sil_manhattan", "sil_correlation")])
+
+# Define categories
+sil_df$category <- cut(sil_df$mean_sil, 
+                       breaks = c(-1, 0, 0.25, 0.5, 1),
+                       labels = c("Negative (likely misassigned)",
+                                 "Weak (0-0.25)",
+                                 "Moderate (0.25-0.5)",
+                                 "Strong (0.5+)"))
+
+# Summary
+cat("Sample Quality by Silhouette:\n")
+print(table(sil_df$category))
+cat("\n")
+
+cat("By Cluster:\n")
+print(table(sil_df$cluster, sil_df$category))
+cat("\n")
+
+# Samples with negative silhouette
+cat("Samples with negative silhouette in ANY metric:\n")
+cat("  Total:", sum(sil_df$any_negative), "samples\n")
+print(table(sil_df$cluster[sil_df$any_negative]))
+cat("\n")
+
+# Samples negative in ALL metrics
+cat("Samples negative in ALL metrics (likely misassigned):\n")
+cat("  Total:", sum(sil_df$all_negative), "samples\n")
+if(sum(sil_df$all_negative) > 0) {
+  print(table(sil_df$cluster[sil_df$all_negative]))
+}
+cat("\n")
+
+################################################################################
+# 2. Identify Worst Samples
+################################################################################
+
+# Bottom 20 samples by mean silhouette
+worst_samples <- sil_df[order(sil_df$mean_sil)[1:min(20, nrow(sil_df))], ]
+
+cat("20 Most Ambiguous Samples:\n")
+print(worst_samples[, c("sample_id", "cluster", "mean_sil", "sil_euclidean", 
+                        "sil_manhattan", "sil_correlation")])
+cat("\n")
+
+# Save for later analysis
+write.csv(sil_df, 
+          "03_Internal_Validation/sample_silhouette_scores.csv",
+          row.names = FALSE)
+
+write.csv(worst_samples,
+          "03_Internal_Validation/ambiguous_samples_top20.csv",
+          row.names = FALSE)
+
+################################################################################
+# 3. Visualize Ambiguous Samples in PCA Space
+################################################################################
+
+cat("Visualizing ambiguous samples in PCA space...\n")
+
+# Add silhouette info to PCA data
+pca_data$mean_sil <- sil_df$mean_sil
+pca_data$category <- sil_df$category
+pca_data$cluster <- factor(cluster_vec)
+
+# Flag worst samples
+pca_data$is_worst <- FALSE
+pca_data$is_worst[match(worst_samples$sample_id, rownames(pca_data))] <- TRUE
+
+# Plot 1: Color by silhouette quality
+png("03_Internal_Validation/plots/pca_by_silhouette_quality.png",
+    width = 12, height = 8, units = "in", res = 300)
+
+# Color palette from red (negative) to green (strong)
+sil_colors <- colorRampPalette(c("red", "orange", "yellow", "lightgreen", "darkgreen"))(100)
+color_idx <- cut(pca_data$mean_sil, breaks = 100, labels = FALSE)
+color_idx[is.na(color_idx)] <- 1
+
+plot(pca_data$PC1, pca_data$PC2,
+     col = sil_colors[color_idx],
+     pch = 19, cex = 1.5,
+     xlab = paste0("PC1 (", var_explained[1], "% variance)"),
+     ylab = paste0("PC2 (", var_explained[2], "% variance)"),
+     main = "PCA Colored by Silhouette Quality")
+
+# Highlight worst samples
+if(sum(pca_data$is_worst) > 0) {
+  points(pca_data$PC1[pca_data$is_worst], 
+         pca_data$PC2[pca_data$is_worst],
+         pch = 1, cex = 2, lwd = 2, col = "black")
+}
+
+# Add color legend
+legend("topright", 
+       legend = c("Strong (>0.5)", "Moderate (0.25-0.5)", 
+                  "Weak (0-0.25)", "Negative (<0)",
+                  "Top 20 worst (circled)"),
+       col = c("darkgreen", "lightgreen", "orange", "red", "black"),
+       pch = c(19, 19, 19, 19, 1),
+       pt.cex = c(1.5, 1.5, 1.5, 1.5, 2),
+       pt.lwd = c(1, 1, 1, 1, 2))
+
+dev.off()
+
+cat("✅  PCA by silhouette quality saved\n")
+
+# Plot 2: Show negative samples per cluster
+png("03_Internal_Validation/plots/pca_negative_samples_highlighted.png",
+    width = 12, height = 8, units = "in", res = 300)
+
+# Base plot with all samples
+plot(pca_data$PC1, pca_data$PC2,
+     col = c("#E69F00", "#56B4E9", "#009E73")[pca_data$cluster],
+     pch = 19, cex = 1.2,
+     xlab = paste0("PC1 (", var_explained[1], "% variance)"),
+     ylab = paste0("PC2 (", var_explained[2], "% variance)"),
+     main = "Samples with Negative Silhouette Scores (Circled)")
+
+# Overlay negative samples with black circles
+neg_idx <- sil_df$any_negative
+if(sum(neg_idx) > 0) {
+  points(pca_data$PC1[neg_idx], 
+         pca_data$PC2[neg_idx],
+         pch = 1, cex = 3, lwd = 3, col = "black")
+}
+
+legend("topright", 
+       legend = c(paste0("Cluster ", 1:3, " (n=", table(cluster_vec), ")"),
+                  paste0("Negative silhouette (n=", sum(neg_idx), ")")),
+       col = c("#E69F00", "#56B4E9", "#009E73", "black"),
+       pch = c(19, 19, 19, 1),
+       pt.cex = c(1.5, 1.5, 1.5, 2),
+       pt.lwd = c(1, 1, 1, 3))
+
+dev.off()
+
+cat("✅  Negative samples highlighted in PCA\n")
+
+################################################################################
+# 4. Same for t-Distributed Stochastic Neighbor (t-SNE)
+################################################################################
+
+cat("Visualizing in t-SNE space...\n")
+
+# Add silhouette info to t-SNE data
+tsne_data$mean_sil <- sil_df$mean_sil
+tsne_data$is_worst <- pca_data$is_worst
+tsne_data$cluster <- factor(cluster_vec)
+
+png("03_Internal_Validation/plots/tsne_negative_samples_highlighted.png",
+    width = 12, height = 8, units = "in", res = 300)
+
+plot(tsne_data$tSNE1, tsne_data$tSNE2,
+     col = c("#E69F00", "#56B4E9", "#009E73")[tsne_data$cluster],
+     pch = 19, cex = 1.2,
+     xlab = "t-SNE Dimension 1",
+     ylab = "t-SNE Dimension 2",
+     main = "t-SNE: Ambiguous Samples (Circled)")
+
+# Overlay negative samples
+if(sum(neg_idx) > 0) {
+  points(tsne_data$tSNE1[neg_idx], 
+         tsne_data$tSNE2[neg_idx],
+         pch = 1, cex = 3, lwd = 3, col = "black")
+}
+
+legend("topright", 
+       legend = c(paste0("Cluster ", 1:3, " (n=", table(cluster_vec), ")"),
+                  paste0("Negative silhouette (n=", sum(neg_idx), ")")),
+       col = c("#E69F00", "#56B4E9", "#009E73", "black"),
+       pch = c(19, 19, 19, 1),
+       pt.cex = c(1.5, 1.5, 1.5, 2),
+       pt.lwd = c(1, 1, 1, 3))
+
+dev.off()
+
+cat(" ✅  t-SNE visualization saved\n")
+
+################################################################################
+# 5. Cluster-Specific Analysis
+################################################################################
+
+cat("Cluster-specific silhouette analysis:\n")
+
+
+for(cl in 1:3) {
+  cat("\nCluster", cl, ":\n")
+  
+  cluster_samples <- sil_df[sil_df$cluster == cl, ]
+  
+  cat("  Total samples:", nrow(cluster_samples), "\n")
+  cat("  Mean silhouette:", round(mean(cluster_samples$mean_sil), 3), "\n")
+  cat("  Samples with negative sil:", sum(cluster_samples$any_negative), "\n")
+  cat("  Samples with weak sil (<0.25):", sum(cluster_samples$mean_sil < 0.25), "\n")
+  
+  # Worst 5 in this cluster
+  worst_in_cluster <- cluster_samples[order(cluster_samples$mean_sil)[1:min(5, nrow(cluster_samples))], ]
+  cat("  Worst 5 samples:\n")
+  print(worst_in_cluster[, c("sample_id", "mean_sil")])
+}
+
+################################################################################
+# 6. Distance to Other Clusters (for negative samples)
+################################################################################
+
+cat("Analyzing where negative samples 'belong'...\n")
+
+# For samples with negative silhouette, which cluster are they closest to?
+if(sum(neg_idx) > 0) {
+  
+  # Use correlation distance matrix
+  dist_mat_full <- as.matrix(dist_correlation)
+  
+  # For each negative sample, find mean distance to each cluster
+  neg_samples_analysis <- data.frame(
+    sample_id = sil_df$sample_id[neg_idx],
+    assigned_cluster = sil_df$cluster[neg_idx],
+    mean_sil = sil_df$mean_sil[neg_idx]
+  )
+  
+  for(cl in 1:3) {
+    cluster_members <- which(cluster_vec == cl)
+    
+    # Calculate mean distance to this cluster for each negative sample
+    neg_samples_analysis[[paste0("dist_to_C", cl)]] <- 
+      sapply(which(neg_idx), function(i) {
+        mean(dist_mat_full[i, cluster_members])
+      })
+  }
+  
+  # Identify which cluster each negative sample is CLOSEST to
+  dist_cols <- c("dist_to_C1", "dist_to_C2", "dist_to_C3")
+  neg_samples_analysis$closest_cluster <- apply(neg_samples_analysis[, dist_cols], 1, which.min)
+  
+  # Flag misassignments (assigned cluster != closest cluster)
+  neg_samples_analysis$potentially_misassigned <- 
+    (neg_samples_analysis$assigned_cluster != neg_samples_analysis$closest_cluster)
+  
+  cat("\nPotentially misassigned samples (negative sil + closer to different cluster):\n")
+  misassigned <- neg_samples_analysis[neg_samples_analysis$potentially_misassigned, ]
+  print(misassigned)
+  
+  cat("\nSummary:\n")
+  cat("  Negative samples:", nrow(neg_samples_analysis), "\n")
+  cat("  Potentially misassigned:", sum(misassigned$potentially_misassigned), "\n")
+  
+  # Save
+  write.csv(neg_samples_analysis,
+            "03_Internal_Validation/negative_samples_cluster_distances.csv",
+            row.names = FALSE)
+}
+
+################################################################################
+# 7. Summary Plot: Silhouette Distribution by Cluster
+################################################################################
+
+png("03_Internal_Validation/plots/silhouette_distribution_by_cluster.png",
+    width = 12, height = 8, units = "in", res = 300)
+
+par(mfrow = c(1, 3))
+
+for(cl in 1:3) {
+  cluster_sil <- sil_df$mean_sil[sil_df$cluster == cl]
+  
+  hist(cluster_sil, 
+       breaks = 30,
+       col = c("#E69F00", "#56B4E9", "#009E73")[cl],
+       main = paste0("Cluster ", cl, " (n=", length(cluster_sil), ")"),
+       xlab = "Mean Silhouette Score",
+       xlim = c(-0.5, 1))
+  
+  abline(v = 0, col = "red", lwd = 2, lty = 2)
+  abline(v = mean(cluster_sil), col = "blue", lwd = 2, lty = 2)
+  
+  text(-0.4, par("usr")[4] * 0.9, 
+       paste0("Mean: ", round(mean(cluster_sil), 3)),
+       pos = 4, col = "blue", font = 2)
+  
+  text(-0.4, par("usr")[4] * 0.8, 
+       paste0("Negative: ", sum(cluster_sil < 0)),
+       pos = 4, col = "red", font = 2)
+}
+
+par(mfrow = c(1, 1))
+dev.off()
+
+cat(" ✅  Silhouette distribution plots saved\n")
+
+################################################################################
+# 8. Compare Cluster Quality
+################################################################################
+
+cat("  CLUSTER QUALITY COMPARISON\n")
+
+
+for(cl in 1:3) {
+  cat("Cluster", cl, ":\n")
+  cluster_samples <- sil_df[sil_df$cluster == cl, ]
+  
+  cat("  Total samples:", nrow(cluster_samples), "\n")
+  cat("  Mean silhouette:", round(mean(cluster_samples$mean_sil), 3), "\n")
+  cat("  Median silhouette:", round(median(cluster_samples$mean_sil), 3), "\n")
+  cat("  Samples with negative sil:", sum(cluster_samples$any_negative), 
+      sprintf("(%.1f%%)", 100*sum(cluster_samples$any_negative)/nrow(cluster_samples)), "\n")
+  cat("  Samples with positive sil:", sum(cluster_samples$mean_sil > 0), 
+      sprintf("(%.1f%%)", 100*sum(cluster_samples$mean_sil > 0)/nrow(cluster_samples)), "\n")
+  cat("  Samples with strong sil (>0.25):", sum(cluster_samples$mean_sil > 0.25), 
+      sprintf("(%.1f%%)", 100*sum(cluster_samples$mean_sil > 0.25)/nrow(cluster_samples)), "\n")
+  cat("\n")
+}
+
+# Statistical test: Are Clusters 1 and 2 significantly better than Cluster 3?
+c1_sil <- sil_df$mean_sil[sil_df$cluster == 1]
+c2_sil <- sil_df$mean_sil[sil_df$cluster == 2]
+c3_sil <- sil_df$mean_sil[sil_df$cluster == 3]
+
+cat("Wilcoxon rank-sum tests:\n")
+cat("  Cluster 1 vs 3: p =", format.pval(wilcox.test(c1_sil, c3_sil)$p.value), "\n")
+cat("  Cluster 2 vs 3: p =", format.pval(wilcox.test(c2_sil, c3_sil)$p.value), "\n")
+cat("  Cluster 1 vs 2: p =", format.pval(wilcox.test(c1_sil, c2_sil)$p.value), "\n")
+
+```
