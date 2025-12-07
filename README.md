@@ -103,7 +103,7 @@ Data acquisition required:
 | 4 | Cross-reactive probe removal | Eliminate probes mapping to multiple genomic locations (Chen et al., 2013) |
 | 5 | Sex chromosome exclusion | Remove X/Y probes to avoid sex-based clustering artifacts |
 | 6 | Beta-Mixture Quantile (BMIQ) normalization | Adjust Type II probe values to match Type I distribution (wateRmelon package) |
-| 7 | (Optional) Additional sanitization (for instance imputing NA) |
+| 7 | (Optional) Additional sanitization (for instance imputing NA) | The data achieved 99.8% complete. Imputation w/ KNN for fine granulation |
 | 8 | Variance-based selection | Select top 10,000 most variable probes for clustering |
 
 ---
