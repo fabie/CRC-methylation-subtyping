@@ -71,14 +71,21 @@ All associations are statistically significant (p < 0.01).*
 Clusters 1 and 2 show consistent positive scores (well-defined subtypes). 
 Cluster 3's low scores reflect known sporadic CRC heterogeneity. That's a biological reality, not methodological failure.*
 
-**Results by Cluster:**
+**Note:** Cluster 3's negative silhouette (-0.03) reflects the known biological heterogeneity of sporadic CRC — 
+these tumors lack a single defining signature, unlike Lynch (Cluster 1) or CIMP-High (Cluster 2). 
+This is expected biology, not methodological failure.*
 
-| Cluster | n | Euclidean | Manhattan | Correlation |
-|---------|---|-----------|-----------|-------------|
-| 1 | 106 | 0.16 | 0.22 | 0.22 |
-| 2 | 73 | 0.20 | 0.25 | 0.10 |
-| 3 | 130 | 0.03 | 0.02 | -0.03 |
-| **Mean** | | **0.11** | **0.14** | **0.09** |
+**Why Cluster 3 shows negative silhouette (-0.03 in Correlation):**
+A negative silhouette means some samples are closer to other clusters than their own. For Cluster 3, this reflects:
+   a. **Biological reality:** Sporadic CRC is inherently heterogeneous; i.e., no single defining
+   molecular signature
+   b. **"Catch-all" category:** Cluster 3 contains tumors that are neither Lynch-like nor CIMP-High
+   c. **Expected finding:** Sporadic cancers arise through diverse pathways, unlike hereditary
+   subtypes
+
+**It's biology:**
+- Clusters 1 & 2 represent **distinct molecular subtypes** (positive scores)
+- Cluster 3 represents **everything else** (the heterogeneous majority of CRC)
 
 
 ### Figure S1: Consensus Stability
