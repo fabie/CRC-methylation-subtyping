@@ -214,9 +214,9 @@ CRC-methylation-subtyping/
 │   └── tables/
 │       └── ref. tables
 │
-├── .gitignore                       # R context, which files to ignore and not track
+├── .gitignore                       # in R context, which files to ignore and not track
 ├── LICENSE                          # MIT licence for academic use
-├── README.md                        # main landing page for the project and repository
+├── README.md                        # project man landing page and repository
 ├── R/
 │   └── helper_functions.R           # reusable utility function
 │
