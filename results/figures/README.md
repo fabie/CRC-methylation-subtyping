@@ -21,7 +21,7 @@ White off-diagonal areas confirm clusters are distinct from each other. Mean con
 **Interpretation:**
 - **Cluster 1 (orange, n=106):** Negative PC1 — hypomethylated (Lynch-like)
 - **Cluster 2 (blue, n=73):** Positive PC1 — hypermethylated (CIMP-High)
-- **Cluster 3 (green, n=130):** Intermediate — heterogeneous (Sporadic)*
+- **Cluster 3 (green, n=130):** Intermediate — heterogeneous (Sporadic)
 
 ### Figure 3: Molecular Markers by Cluster
 
