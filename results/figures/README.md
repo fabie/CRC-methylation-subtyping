@@ -1,18 +1,18 @@
 ### Figure 1: Consensus Matrix (k=3)
 
-![Consensus Matrix](results/figures/fig1_consensus_matrix_k3.png)
+![Consensus Matrix] (results/figures/fig1_consensus_matrix_k3.png)
 
 *Figure 1: Consensus clustering matrix showing three distinct methylation subtypes. Mean consensus = 0.97.*
 
 ### Figure 2: PCA Cluster Visualization
 
-![PCA Clusters](results/figures/fig2_pca_clusters_k3.png)
+![PCA Clusters] (results/figures/fig2_pca_clusters_k3.png)
 
 *Figure 2: Principal Component Analysis showing cluster separation in methylation space.*
 
 ### Figure 3: Molecular Markers by Cluster
 
-![Molecular Markers](results/figures/fig3_molecular_markers_by_cluster.png)
+![Molecular Markers] (results/figures/fig3_molecular_markers_by_cluster.png)
 
 *Figure 3: Distribution of Lynch, BRAF, MSI-High, and KRAS mutations across clusters.*
 
@@ -57,7 +57,7 @@ Cluster 3 is heterogeneous (Sporadic).*
 
 ### Figure S4: Silhouette Comparison by Distance Metric
 
-![Silhouette by Metric](results/figures/figS4_silhouette_metric_barplot.png)
+![Silhouette by Metric] (results/figures/figS4_silhouette_metric_barplot.png)
 
 *Figure: Mean silhouette width across three distance metrics. 
 Consistent scores (0.09–0.14) demonstrate clustering robustness 
