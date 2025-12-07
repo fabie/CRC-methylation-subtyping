@@ -1,0 +1,22 @@
+### Table 1: Molecular Markers by Cluster
+
+> Full data: [table1_molecular_markers_by_cluster.csv](results/tables/table1_molecular_markers_by_cluster.csv)
+
+| Feature | Overall N | Overall % | Cluster 1 % | Cluster 2 % | Cluster 3 % | P-value | Sig |
+|---------|-----------|-----------|-------------|-------------|-------------|---------|-----|
+| Lynch mutations | 38 | 13 | 7.8 | 24.3 | 11.4 | 0.0063 | ** |
+| BRAF mutations | 46 | 15.8 | 2.9 | 51.5 | 7.3 | 0.0005 | *** |
+| MSI-High | 67 | 18.2 | 22.9 | 13.6 | 15.4 | 2.68e-09 | *** |
+| KRAS mutations | 134 | 45.9 | 31.1 | 39.4 | 61.8 | 1.14e-05 | *** |
+
+*Statistical significance: \*p<0.05, \*\*p<0.01, \*\*\*p<0.001*
+- **Lynch syndrom:** p < 0.01 Highly significant
+- **BRAF mutations:** p < 0.001 Very highly significant
+- **MSI-High:** p < 0.001 Very highly significant - p =  2.68e-09 is extremely small and indicate very strong association
+- **KRAS mutations:** p < 0.001 Very highly significant
+
+**Key Findings:**
+- **Cluster 1** — Highest Lynch mutations (7.8%) → Lynch Syndrome subtype
+- **Cluster 2** — Highest BRAF mutations (51.5%) → CIMP-High subtype
+- **Cluster 3** — Highest KRAS mutations (15.4%) → Sporadic subtype
+```
