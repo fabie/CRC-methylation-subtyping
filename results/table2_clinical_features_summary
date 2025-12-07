@@ -3,7 +3,7 @@
 | Feature | Cluster 1 | Cluster 2 | Cluster 3 | P-value | Significance |
 |---------|-----------|-----------|-----------|---------|--------------|
 | Age at Diagnosis (years) | 61.2 ± 13.5 | 69.4 ± 12.7 | 67.1 ± 12.3 | 8.23e-05 | *** |
-| Gender (% Male) | 51.5 | 50.0 | 55.3 | 0.540 | ns |
+| Gender  | 51.5 | 50.0 | 55.3 | 0.540 | ns |
 | Stage I (%) | 7.4 | 21.2 | 18.5 | 0.0065 | ** |
 | Stage II (%) | 37.9 | 43.9 | 38.7 | 0.0065 | ** |
 | Stage III (%) | 29.5 | 28.8 | 31.9 | 0.0065 | ** |
@@ -15,4 +15,7 @@
 - Cluster 1 patients are significantly younger (mean 61.2 years)
 - Cluster 1 has highest Stage IV rate (25.3%) — more aggressive disease
 - Cluster 2 has lowest Stage IV (6.1%) — better prognosis
+- Stage II and III hare similar across clusters
+- Cluster 2 significanlty older
+- Cluster 2 has most early-stage
 - Gender is balanced across clusters (not significant)
