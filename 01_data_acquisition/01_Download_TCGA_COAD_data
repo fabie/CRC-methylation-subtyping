@@ -1,0 +1,86 @@
+---
+title: "TCGA-COAD Download - Fixed for TCGAbiolinks 2.36.0 (Phase2)"
+author: "Fabie Van Cappel"
+date: "October 2025"
+output: 
+  pdf_document:
+  latex_engine: xelatex
+toc: true
+number_sections: true
+keep_tex: true
+---
+
+```{r}
+library(TCGAbiolinks)
+library(SummarizedExperiment)
+
+# Library: here
+#readRDS(here::here("clinical", "COAD_clinical.rds")) # for portability
+
+# setwd() is not portable
+# setwd("/../TCGA_COAD_Thesis/00_Raw_Data") # your directory path
+
+
+dir.create("clinical", showWarnings = FALSE)
+dir.create("mutation", showWarnings = FALSE)
+dir.create("methylation", showWarnings = FALSE)
+
+cat("\n=== TCGA-COAD Download Started ===\n")
+cat("Start Time:", as.character(Sys.time()), "\n\n")
+
+################################################################################
+# 1. CLINICAL DATA - Using GDCquery_clinic 
+################################################################################
+
+cat("1/3: Downloading Clinical Data...\n")
+
+# Direct clinical query - no download needed
+clinical <- GDCquery_clinic(project = "TCGA-COAD", type = "clinical")
+
+# Save
+saveRDS(clinical, "clinical/COAD_clinical.rds")
+write.csv(clinical, "clinical/COAD_clinical.csv", row.names = FALSE)
+
+cat("✅ Clinical data saved! (", nrow(clinical), "patients,", ncol(clinical), "variables )\n\n")
+
+################################################################################
+# 2. MUTATION DATA 
+################################################################################
+
+cat("2/3: Downloading Mutation Data (~15 min)...\n")
+
+query_mut <- GDCquery(
+  project = "TCGA-COAD",
+  data.category = "Simple Nucleotide Variation",
+  data.type = "Masked Somatic Mutation",
+  workflow.type = "Aliquot Ensemble Somatic Variant Merging and Masking"
+)
+
+GDCdownload(query_mut)
+mutation <- GDCprepare(query_mut)
+saveRDS(mutation, "mutation/COAD_mutation.rds")
+
+cat("✅ Mutation data saved! (", nrow(mutation), "mutations in", 
+    length(unique(mutation$Tumor_Sample_Barcode)), "samples )\n\n")
+
+#################################################################################
+# 3. METHYLATION DATA (Given the size of the dataset, this may take a long time!)
+#################################################################################
+
+cat("3/3: Downloading Methylation Data (~45 min)...\n")
+cat("This is the big one - perfect time to sleep! 🥱 zzzz 😴\n\n")
+
+query_meth <- GDCquery(
+  project = "TCGA-COAD",
+  data.category = "DNA Methylation",
+  platform = "Illumina Human Methylation 450",
+  data.type = "Methylation Beta Value"
+)
+
+GDCdownload(query_meth, method = "api")
+methylation <- GDCprepare(query_meth)
+saveRDS(methylation, "methylation/COAD_methylation_raw.rds")
+
+cat("✅ Methylation data saved! (", nrow(methylation), "probes x", ncol(methylation), "samples )\n\n")
+
+```
