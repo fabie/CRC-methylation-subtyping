@@ -3,7 +3,7 @@
 **A proof-of-concept for objective biomarker discovery with potential applications in veteran toxic exposure assessment.**
 
 **Author:** Fabienne C. Van Cappel  
-**Program:** Master of Science in Data Science, Regis University  
+**Program:** Master of Science in Data Science, Regis University, Anderson College of Business and Computing.  
 **Course:** MSDS 696 Capstone Project | Fall 2025
 
 ---
