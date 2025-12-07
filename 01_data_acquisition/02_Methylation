@@ -1,0 +1,70 @@
+---
+title: "R Methylation Dataset (Phase2)"
+author: "Fabie Van Cappel"
+date: "October 2025"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    number_sections: true
+    keep_tex: true
+---
+
+```{r}
+# Install sesame package (the main one!)
+cat("Installing sesame package...\n")
+BiocManager::install("sesame", update = FALSE, ask = FALSE)
+
+cat("✓ sesame installed!\n\n")
+
+# STEP 2: Clear old objects and start fresh
+rm(list = ls())  # Clear everything
+library(TCGAbiolinks)
+library(SummarizedExperiment)
+
+# STEP 3: Set directory
+# Library: here
+#readRDS(here::here("clinical", "COAD_clinical.rds")) # for portability
+
+# setwd() is not portable
+# setwd("/../TCGA_COAD_Thesis/00_Raw_Data") # your directory path
+
+
+# STEP 4: Create fresh query
+cat("Create fresh methylation query...\n")
+query_meth <- GDCquery(
+  project = "TCGA-COAD",
+  data.category = "DNA Methylation",
+  platform = "Illumina Human Methylation 450",
+  data.type = "Methylation Beta Value"
+)
+
+# STEP 5: Prepare the already-downloaded data
+cat("Preparing methylation data from downloaded files...\n")
+
+methylation <- GDCprepare(query_meth)
+
+# STEP 6: Save it
+dir.create("methylation", showWarnings = FALSE)
+
+# Save it
+saveRDS(methylation, "methylation/COAD_methylation_raw.rds")
+
+# STEP 7: Success message!
+cat("\n ✳️ METHYLATION DATA SAVED! ✳️\n")
+cat("Dimensions:", nrow(methylation), "probes x", ncol(methylation), "samples\n")
+cat("File size:", round(file.size("methylation/COAD_methylation_raw.rds")/1e9, 2), "GB\n\n")
+
+cat("╔════════════════════════════════════════╗\n")
+cat("║  ALL DATA DOWNLOADED & READY!          ║\n")
+cat("╚════════════════════════════════════════╝\n\n")
+
+cat("📁 Complete datasets:\n")
+cat("   ✅ clinical/COAD_clinical.rds (521 patients)\n")
+cat("   ✅ mutation/COAD_mutation.rds (252,773 mutations)\n")
+cat("   ✅ methylation/COAD_methylation_raw.rds (", nrow(methylation), "probes)\n\n")
+
+cat("🥳 COMPLETE - DATA SUMMARY! 🥳\n")
+cat("End time:", as.character(Sys.time()), "\n\n")
+
+```
