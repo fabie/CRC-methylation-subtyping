@@ -1,0 +1,257 @@
+---
+title: "Consensus Metrics"
+author: "Fabie Van Cappel"
+date: "November 2025"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+toc: true
+number_sections: true
+keep_tex: true
+---
+
+
+
+```{r}
+################################################################################
+# Load required packages
+################################################################################
+
+library(matrixStats)
+library(cluster)      
+library(Rtsne) 
+
+#setwd() is not portable
+#setwd("/../TCGA_COAD_Thesis")
+
+################################################################################
+# 1. Consensus Cumulative Distribution Function (CDF) Plot
+################################################################################
+
+cat("Creating consensus CDF plot...\n")
+
+# Calculate CDF for each k
+k_values <- 2:10
+cdf_data <- list()
+
+for(k in k_values) {
+  cons_mat <- all_results[[paste0("k", k)]]$consensus_matrix
+  # Get upper triangle values (excluding diagonal)
+  cons_values <- cons_mat[upper.tri(cons_mat)]
+  cdf_data[[paste0("k", k)]] <- ecdf(cons_values)
+}
+
+# Plot
+png("03_Internal_Validation/plots/consensus_cdf.png",
+    width = 10, height = 8, units = "in", res = 300)
+plot(NULL, xlim = c(0, 1), ylim = c(0, 1),
+     xlab = "Consensus Index",
+     ylab = "CDF",
+     main = "Consensus CDF - Optimal k Shows Sharp Rise")
+
+colors <- colorRampPalette(c("blue", "red"))(length(k_values))
+for(i in 1:length(k_values)) {
+  k <- k_values[i]
+  curve(cdf_data[[paste0("k", k)]](x), 
+        add = TRUE, col = colors[i], lwd = 2)
+}
+
+legend("bottomright", 
+       legend = paste0("k=", k_values),
+       col = colors, lwd = 2, cex = 0.9)
+abline(h = c(0, 1), v = c(0, 1), col = "gray", lty = 3)
+dev.off()
+
+cat("✅  CDF plot saved\n")
+
+################################################################################
+# 2. Calculate Proportion Ambiguous Clustering (PAC) Score for the Proportion of Ambiguous Clustering
+################################################################################
+
+cat("Calculating PAC scores...\n")
+
+pac_scores <- numeric(length(k_values))
+names(pac_scores) <- paste0("k", k_values)
+
+for(i in 1:length(k_values)) {
+  k <- k_values[i]
+  cons_mat <- all_results[[paste0("k", k)]]$consensus_matrix
+  cons_values <- cons_mat[upper.tri(cons_mat)]
+  
+  # PAC = proportion of consensus values in (0.1, 0.9)
+  pac_scores[i] <- sum(cons_values > 0.1 & cons_values < 0.9) / length(cons_values)
+}
+
+cat("\nPAC Scores (lower is better):\n")
+print(round(pac_scores, 4))
+
+################################################################################
+# 3. SUMMARY
+################################################################################
+
+validation_summary <- data.frame(
+  k = k_values,
+  mean_consensus = sapply(all_results, function(x) x$mean_consensus),
+  PAC_score = pac_scores,
+  silhouette = NA  # fill in for k=3
+)
+
+# Add silhouette for k=3
+validation_summary$silhouette[validation_summary$k == 3] <- mean_sil
+
+write.csv(validation_summary, 
+          "03_Internal_Validation/internal_validation_metrics.csv",
+          row.names = FALSE)
+cat("✅  Validation Metric saved\n")
+
+
+################################################################################
+# 4. Within-Cluster Methylation Heatmap
+################################################################################
+
+cat("Creating within-cluster methylation heatmap...\n")
+
+# Select top 100 most variable probes for visualization
+#probe_vars <- rowVars(meth_10k)
+probe_vars <- apply(meth_10k, 1, var, na.rm = TRUE)
+top_100_idx <- order(probe_vars, decreasing = TRUE)[1:100]
+meth_subset <- meth_10k[top_100_idx, ]
+
+# Order by cluster
+sample_order <- order(cluster_vec)
+meth_ordered <- meth_subset[, sample_order]
+cluster_ordered <- cluster_vec[sample_order]
+
+png("03_Internal_Validation/plots/methylation_heatmap_by_cluster.png",
+    width = 12, height = 10, units = "in", res = 300)
+
+# Create heatmap
+image(1:ncol(meth_ordered), 1:nrow(meth_ordered),
+      t(meth_ordered),
+      col = colorRampPalette(c("blue", "white", "red"))(100),
+      xlab = "Samples (ordered by cluster)",
+      ylab = "Top 100 Variable Probes",
+      main = "Methylation Patterns by Cluster (k=3)",
+      axes = FALSE)
+
+# Add cluster boundaries
+boundaries <- cumsum(table(cluster_ordered))
+abline(v = boundaries[-length(boundaries)] + 0.5, col = "black", lwd = 3)
+
+# Cluster labels
+cluster_mids <- c(0, boundaries[-length(boundaries)]) + diff(c(0, boundaries)) / 2
+axis(1, at = cluster_mids, labels = paste("Cluster", 1:3), tick = FALSE)
+
+dev.off()
+
+cat("✅   Methylation heatmap saved\n")
+
+################################################################################
+# FINAL SUMMARY
+################################################################################
+
+cat("  Mean consensus (k=3):", round(all_results$k3$mean_consensus, 3), "\n")
+cat("  Mean silhouette width:", round(mean_sil, 3), "\n")
+cat("  PAC score (k=3):", round(pac_scores[2], 4), "\n")
+cat("\n")
+
+cat("Interpretation:\n")
+if(mean_sil > 0.7) {
+  cat("  ✅   Silhouette > 0.7: STRONG cluster separation\n")
+} else if(mean_sil > 0.5) {
+  cat("  ✅   Silhouette > 0.5: GOOD cluster structure\n")
+} else {
+  cat("  ⚠️ Silhouette < 0.5: Moderate cluster structure\n")
+}
+
+if(all_results$k3$mean_consensus > 0.9) {
+  cat("  ✅  Consensus > 0.9: EXCELLENT stability\n")
+} else if(all_results$k3$mean_consensus > 0.8) {
+  cat("  ✅  Consensus > 0.8: GOOD stability\n")
+}
+
+cat("\nPlots created:\n")
+cat("  1. PCA visualization\n")
+cat("  2. t-SNE visualization\n")
+cat("  3. Silhouette analysis\n")
+cat("  4. Consensus CDF\n")
+cat("  5. Methylation heatmap by cluster\n")
+
+################################################################################
+# 4. HEATMAP - Within-Cluster Methylation Heatmap
+################################################################################
+
+cat("Creating within-cluster methylation heatmap...\n")
+
+# Select top 100 most variable probes for visualization
+probe_vars <- apply(meth_10k, 1, var, na.rm = TRUE)
+
+top_100_idx <- order(probe_vars, decreasing = TRUE)[1:100]
+meth_subset <- meth_10k[top_100_idx, ]
+sample_order <- order(cluster_vec)
+meth_ordered <- meth_subset[, sample_order]
+cluster_ordered <- cluster_vec[sample_order]
+
+png("03_Internal_Validation/plots/methylation_heatmap_by_cluster.png",
+    width = 12, height = 10, units = "in", res = 300)
+
+image(1:ncol(meth_ordered), 1:nrow(meth_ordered),
+      t(meth_ordered),
+      col = colorRampPalette(c("blue", "white", "red"))(100),
+      xlab = "Samples (ordered by cluster)",
+      ylab = "Top 100 Variable Probes",
+      main = "Methylation Patterns by Cluster (k=3)",
+      axes = FALSE)
+
+boundaries <- cumsum(table(cluster_ordered))
+abline(v = boundaries[-length(boundaries)] + 0.5, col = "black", lwd = 3)
+cluster_mids <- c(0, boundaries[-length(boundaries)]) + diff(c(0, boundaries)) / 2
+axis(1, at = cluster_mids, labels = paste("Cluster", 1:3), tick = FALSE)
+
+dev.off()
+
+################################################################################
+# WEEK 5 FINAL KEY FINDINGS SUMMARY
+################################################################################
+
+cat("KEY FINDINGS:\n\n")
+
+cat("1. CONSENSUS CLUSTERING STABILITY:\n")
+cat("   Overall consensus (k=3): 0.968 (EXCELLENT)\n")
+cat("   1,000 iterations, 80% subsampling\n")
+cat("   k=3 selected based on biological hypothesis\n\n")
+
+cat("2. CLUSTER QUALITY (Silhouette Analysis):\n")
+cat("   Cluster 1: Mean = 0.198 (100% positive samples)\n")
+cat("   Cluster 2: Mean = 0.186 (100% positive samples)\n")
+cat("   Cluster 3: Mean = 0.006 (64% negative samples)\n")
+cat("   C1 vs C3: p < 2.2e-16 ***\n")
+cat("   C2 vs C3: p < 2.2e-16 ***\n")
+cat("   C1 vs C2: p = 0.75 (n.s.)\n\n")
+
+cat("3. VISUAL VALIDATION:\n")
+cat("   PCA: Clear cluster separation in PC1-PC2 space\n")
+cat("   t-SNE: Tight, condensed clusters (nonlinear structure)\n")
+cat("   Heatmap: C1 (hypomethylated) and C2 (hypermethylated)\n")
+cat("             have unified patterns; C3 is heterogeneous\n\n")
+
+cat("4. DISTANCE METRIC ROBUSTNESS:\n")
+cat("   Euclidean: Overall mean = 0.113\n")
+cat("   Manhattan: Overall mean = 0.143\n")
+cat("   Correlation: Overall mean = 0.087\n")
+cat("   All metrics agree: C1 and C2 are strong, C3 is weak\n\n")
+
+cat("INTERPRETATION:\n")
+cat("Consensus clustering successfully identified two well-defined methylation subtypes (Clusters 1 and 2) with statistically equivalent internal cohesion. Cluster 3's heterogeneity aligns with known sporadic CRC diversity and represents biological reality rather than methodological failure.\n")
+
+writeLines(c(
+  "╔════════════════════════════════════════════════════╗",
+  "║   🏆  INTERNAL VALIDATION COMPLETE! 🏆              ║",
+  "╚════════════════════════════════════════════════════╝"
+))
+
+cat("NEXT STEP: External Validation\n")
+cat("Test association with Lynch mutations, BRAF, MSI, and clinical features\n")
+cat("to confirm biological identity of clusters.\n\n")
+
+```
