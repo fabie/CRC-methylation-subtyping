@@ -1,6 +1,6 @@
 ### Figure 1: Consensus Matrix (k=3)
 
-![Consensus Matrix](results/figures/fig1_consensus_matrix_k3.png)
+![Consensus Matrix](https://github.com/fabie/CRC-methylation-subtyping/edit/main/results/figures/fig1_consensus_matrix_k3.png?raw=true)
 
 *Figure 1: Consensus clustering matrix showing three distinct methylation subtypes. Mean consensus = 0.97.*
 
