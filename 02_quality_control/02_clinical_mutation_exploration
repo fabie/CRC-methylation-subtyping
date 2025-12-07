@@ -1,0 +1,469 @@
+---
+title: "Data Exploration (Phase3)"
+author: "Fabie Van Cappel"
+date: "November 2025"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+toc: true
+number_sections: true
+keep_tex: true
+---
+
+
+```{r, clinical and mutation explore}
+################################################################################
+# Phase 2: Clinical & Mutation Exploration
+# Added: Comprehensive MMR/MSI gene analysis (Core and MSI Pathway)
+################################################################################
+
+library(ggplot2)
+library(dplyr)
+library(magrittr) 
+library(tidyverse) # full suite (readr, ggplot, dplyr)
+
+# Library: here
+#readRDS(here::here("clinical", "COAD_clinical.rds")) # For portability
+
+# setwd() is not portable
+#setwd("/../TCGA_COAD_Thesis/00_Raw_Data")
+
+# Load data
+clinical <- readRDS("clinical/COAD_clinical.rds")
+mutation <- readRDS("mutation/COAD_mutation.rds")
+methylation <- readRDS("methylation/COAD_methylation_raw.rds")
+
+# Get the 292 samples with all three data types
+methylation_ids <- unique(substr(colnames(methylation), 1, 12))
+mutation_ids <- unique(substr(mutation$Tumor_Sample_Barcode, 1, 12))
+clinical_ids <- clinical$bcr_patient_barcode
+cohort_ids <- Reduce(intersect, list(clinical_ids, mutation_ids, methylation_ids))
+
+cat("\n ≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠\n")
+cat("    CLINICAL & MUTATION EXPLORATION        \n")
+cat("   ≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠\n\n")
+
+cat("Analyzing", length(cohort_ids), "samples with complete data\n\n")
+
+# Filter clinical to cohort
+clinical_cohort <- clinical[clinical$bcr_patient_barcode %in% cohort_ids, ]
+cohort_barcodes <- mutation$Tumor_Sample_Barcode[substr(mutation$Tumor_Sample_Barcode, 1, 12) %in% cohort_ids]
+mutation_cohort <- mutation[mutation$Tumor_Sample_Barcode %in% cohort_barcodes, ]
+
+################################################################################
+# 1. CLINICAL CHARACTERISTICS
+################################################################################
+
+# Age at diagnosis
+cat("📊 AGE AT DIAGNOSIS:\n")
+if("age_at_diagnosis" %in% colnames(clinical_cohort)) {
+    age_years <- clinical_cohort$age_at_diagnosis / 365.25
+    cat("   Mean:", round(mean(age_years, na.rm=TRUE), 1), "years\n")
+    cat("   Median:", round(median(age_years, na.rm=TRUE), 1), "years\n")
+    cat("   Range:", round(min(age_years, na.rm=TRUE), 1), "-", 
+        round(max(age_years, na.rm=TRUE), 1), "years\n")
+    cat("   Young (<50 years):", sum(age_years < 50, na.rm=TRUE), 
+        "(", round(100*sum(age_years < 50, na.rm=TRUE)/sum(!is.na(age_years)), 1), "%)\n")
+    cat("   → Lynch typically presents <50 years\n\n")
+}
+
+# Gender
+cat("⚤ GENDER:\n")
+if("gender" %in% colnames(clinical_cohort)) {
+    gender_table <- table(clinical_cohort$gender)
+    print(gender_table)
+    cat("\n")
+}
+
+# Tumor stage
+cat("🎗️  TUMOR STAGE:\n")
+if("ajcc_pathologic_stage" %in% colnames(clinical_cohort)) {
+    stage_table <- table(clinical_cohort$ajcc_pathologic_stage)
+    stage_df <- as.data.frame(stage_table)
+    stage_df <- stage_df[order(-stage_df$Freq), ]
+    print(stage_df[1:10, ])
+    cat("\n")
+}
+
+# Vital status
+cat("💚 VITAL STATUS:\n")
+if("vital_status" %in% colnames(clinical_cohort)) {
+    status_table <- table(clinical_cohort$vital_status)
+    print(status_table)
+    if("Alive" %in% names(status_table)) {
+      alive_pct <- round(100 * status_table["Alive"] / sum(status_table), 1)
+      cat("   Alive:", alive_pct, "%\n")
+    } 
+    cat("\n")
+}
+
+################################################################################
+# 2. LYNCH SYNDROME GENES (Core germline Mutation Mismatch Repair-MMR genes)
+################################################################################
+
+cat("≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠\n")
+cat("LYNCH SYNDROME GENES (core germline MMR genes)\n")
+cat("≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠\n\n")
+
+# Core Lynch genes
+lynch_core <- c("MLH1", "MSH2", "MSH6", "PMS2", "EPCAM") # Note: EPCAM particular for MSH2 (silence)
+
+cat("🧬 Core Lynch syndrome genes:\n")
+cat("   ", paste(lynch_core, collapse=", "), "\n")
+cat(" Germline mutations cause hereditary Lynch syndrome\n\n")
+
+# Filter mutations to cohort samples
+cohort_barcodes <- mutation$Tumor_Sample_Barcode[substr(mutation$Tumor_Sample_Barcode, 1, 12) %in% cohort_ids]
+mutation_cohort <- mutation[mutation$Tumor_Sample_Barcode %in% cohort_barcodes, ]
+
+# Find Lynch core mutations
+lynch_mutations <- mutation_cohort[mutation_cohort$Hugo_Symbol %in% lynch_core, ]
+
+if (nrow(lynch_mutations) > 0) {
+    cat("✅ Found", nrow(lynch_mutations), "Lynch core gene mutations!\n\n")
+    
+    # Count by gene
+    lynch_by_gene <- table(lynch_mutations$Hugo_Symbol)
+    cat("Mutations per gene:\n")
+    print(sort(lynch_by_gene, decreasing=TRUE))
+    cat("\n")
+    
+    # Count samples
+    lynch_samples <- unique(substr(lynch_mutations$Tumor_Sample_Barcode, 1, 12))
+    cat("Samples with Lynch core mutations:", length(lynch_samples), 
+        "(", round(100*length(lynch_samples)/length(cohort_ids), 1), "%)\n")
+    cat(" Expected Lynch syndrome: ~3-5% of all CRC, ~15-20% of MSI-high CRC\n\n")
+    
+    # Mutation types
+    cat("Variant classifications:\n")
+    variant_table <- table(lynch_mutations$Variant_Classification)
+    print(sort(variant_table, decreasing=TRUE))
+    cat("\n")
+    
+} else {
+    cat("⛔  No Lynch core mutations found\n\n")
+}
+
+################################################################################
+# 3. EXTENDED MMR/Microsatellite Instability (MSI) PATHWAY GENES (defective DNA mismatch repair pathway)
+################################################################################
+
+# Additional MMR/MSI genes
+mmr_secondary <- c("MSH3")
+polymerase <- c("POLE", "POLD1")
+exonuclease <- c("EXO1")
+
+cat("Extended MSI-related genes:\n\n")
+
+# MSH3 (secondary MMR)
+cat("A) Secondary MMR gene:\n")
+cat("   MSH3 - works with MSH2 in MutSβ complex\n")
+msh3_muts <- mutation_cohort[mutation_cohort$Hugo_Symbol == "MSH3", ]
+if(nrow(msh3_muts) > 0) {
+    msh3_samples <- unique(substr(msh3_muts$Tumor_Sample_Barcode, 1, 12))
+    cat("   MSH3 mutations:", length(msh3_samples), "samples\n\n")
+} else {
+    cat(" ⛔  No MSH3 mutations found\n\n")
+}
+
+# Proofreading of the enzyme that synthesizes long chain of polymers (ref. polymerase)
+cat("B) Polymerase proofreading genes:\n")
+cat("   POLE, POLD1 - cause ultramutated tumors\n")
+poly_muts <- mutation_cohort[mutation_cohort$Hugo_Symbol %in% polymerase, ]
+if(nrow(poly_muts) > 0) {
+    poly_samples <- unique(substr(poly_muts$Tumor_Sample_Barcode, 1, 12))
+    poly_by_gene <- table(poly_muts$Hugo_Symbol)
+    cat("   Polymerase mutations:", length(poly_samples), "samples\n")
+    cat("     ", paste(names(poly_by_gene), "=", poly_by_gene, collapse=", "), "\n")
+    cat("   Associated with excellent prognosis\n\n")
+} else {
+    cat("   ⛔  No polymerase mutations found\n\n")
+}
+
+# Enzyme that cleaves nucleotides one by one from the end of a polynucleotide chain (ref. exonuclease)
+cat("C) Exonuclease repair:\n")
+cat("   EXO1 - involved in MMR pathway\n")
+exo_muts <- mutation_cohort[mutation_cohort$Hugo_Symbol == "EXO1", ]
+if(nrow(exo_muts) > 0) {
+    exo_samples <- unique(substr(exo_muts$Tumor_Sample_Barcode, 1, 12))
+    cat("   EXO1 mutations:", length(exo_samples), "samples\n\n")
+} else {
+    cat("   ⛔  No EXO1 mutations found\n\n")
+}
+
+# TOTAL MSI-related
+all_msi_genes <- c(lynch_core, mmr_secondary, polymerase, exonuclease)
+all_msi_muts <- mutation_cohort[mutation_cohort$Hugo_Symbol %in% all_msi_genes, ]
+all_msi_samples <- unique(substr(all_msi_muts$Tumor_Sample_Barcode, 1, 12))
+
+cat("📊 TOTAL MSI-RELATED GENES:\n")
+cat("   Any MSI/MMR gene mutation:", length(all_msi_samples), "samples")
+cat(" (", round(100*length(all_msi_samples)/length(cohort_ids), 1), "%)\n")
+cat("   This includes all repair mechanisms\n\n")
+
+################################################################################
+# 4. KEY ONCOGENIC DRIVER GENES (ref. colorectal cancer)
+################################################################################
+
+driver_genes <- c("BRAF", "KRAS", "TP53", "APC", "PIK3CA")
+
+braf_samples <- character(0)
+kras_samples <- character(0)
+
+cat("🎗 Major CRC oncogenes:", paste(driver_genes, collapse=", "), "\n")
+cat("   These drive tumor growth (separate from DNA repair)\n\n")
+
+for(gene in driver_genes) {
+    gene_muts <- mutation_cohort[mutation_cohort$Hugo_Symbol == gene, ]
+    
+    if(nrow(gene_muts) > 0) {
+        gene_samples <- unique(substr(gene_muts$Tumor_Sample_Barcode, 1, 12))
+        pct <- round(100 * length(gene_samples) / length(cohort_ids), 1)
+        
+        cat(gene, "mutations:\n")
+        cat("   Samples:", length(gene_samples), "(", pct, "%)\n")
+        
+        # Special annotations
+        if(gene == "BRAF") {
+            v600e <- sum(grepl("V600E", gene_muts$HGVSp_Short))
+            if(v600e > 0) {
+                cat("   BRAF V600E:", v600e, "mutations\n")
+                cat("   Strongly associated with CIMP-high phenotype\n")
+                cat("   Often co-occurs with MLH1 hypermethylation\n")
+            }
+        }
+        
+        if(gene == "KRAS") {
+            cat("   KRAS mutations typical of sporadic CRC\n")
+            cat("   Usually mutually exclusive with BRAF\n")
+        }
+        
+        if(gene == "TP53") {
+            cat("   TP53 mutations associated with chromosomal instability\n")
+        }
+        
+        if(gene == "APC") {
+            cat("   APC is the gatekeeper of colorectal carcinogenesis\n")
+        }
+        
+        cat("\n")
+    }
+}
+
+################################################################################
+# 5. ESTIMATED MUTATION TMB (mutation per megabase) - WES-style approximation
+
+# Definition: Tumor Mutation Burden (TMB) is the number of somatic (non-inherited) mutations per megabase (Mb) of the tumor genome.
+# TMB = Size of coding region analyzed (in Mb) / Number of non-synonymous somatic mutations
+# TMB is a bio-marker for predicting response to immuno-therapy (i.e., PD-1/PD-L1 blockers)
+
+################################################################################
+
+#library(dplyr)
+
+cat("TUMOR MUTATION BURDEN (TMB)\n")
+
+
+# Look a cols in mutation cohort
+colnames(mutation_cohort)
+
+# TCGA Whole-Exome Sequencing (WXS) callable regions. Keep as a constant (38) for comparability
+TCGA_CODING_MB <- 38
+
+# (Antonymous) Protein-altering sequence amino-acids classes (TCGA MAF bioinformatics  conventions)
+ns_classes <- c(
+  "Missense_Mutation", "Nonsense_Mutation", "Frame_Shift_Del", "Frame_Shift_Ins",
+  "In_Frame_Del", "In_Frame_Ins", "Splice_Site", "Translation_Start_Site",
+  "Nonstop_Mutation")
+
+cat("📊 TMB Calculation Method:\n")
+cat("   Coding region: ~38 Mb (TCGA WXS)\n")
+cat("   Variants: Non-synonymous only\n")
+cat("   Filtering: Deduplicated, PASS-only if available\n\n")
+
+# Column safe helpers
+has_col <- function(df, x) x %in% names(df)
+
+# Build per-variant key to deduplicate (per-sample locus)
+mutation_ns <- mutation_cohort %>%
+  # Add paitent_id and ALT
+  mutate(
+    patient_id = substr(.data[["Tumor_Sample_Barcode"]], 1, 12),
+    # ALT = dplyr::coalesce(.data[["Tumor_Seq_Allele2"]], .data[["Tumor_Seq_Allele1"]]) %>%
+  
+    # Build the key    
+    var_key = paste(
+      patient_id,
+      Chromosome,
+      Start_Position, 
+      Reference_Allele,
+      Tumor_Seq_Allele2,
+      sep = "|"
+    )
+  ) %>%
+  filter(patient_id %in% cohort_ids) %>%
+  filter(!is.na(.data[["Hugo_Symbol"]]) & .data[["Hugo_Symbol"]] != "") %>%
+  filter(Variant_Classification %in% ns_classes) %>%
+  
+  # Apply FILTER column if it exists
+  { if ("FILTER" %in% names(.)) {
+      filter(., FILTER %in% c("PASS", "", "."))
+    } else {
+      .
+    }
+  } %>%
+  
+  # Remove duplicates
+  distinct(var_key, .keep_all = TRUE)
+
+cat("Filtered to", nrow(mutation_ns), "unique non-synonymous variants\n\n")
+
+# Calculate TMB per sample
+mutations_per_sample <- mutation_ns %>%
+  count(patient_id, name = "n_nonsyn") %>%
+  mutate(tmb_per_mb = n_nonsyn / TCGA_CODING_MB)
+
+# Handle samples with zero mutations
+all_cohort_tmb <- data.frame(patient_id = cohort_ids) %>%
+  left_join(mutations_per_sample, by = "patient_id") %>%
+  mutate(
+    n_nonsyn = ifelse(is.na(n_nonsyn), 0, n_nonsyn),
+    tmb_per_mb = ifelse(is.na(tmb_per_mb), 0, tmb_per_mb)
+  )
+
+# Statistics
+cat("📊 TMB Statistics:\n")
+cat("   Mean:", round(mean(all_cohort_tmb$tmb_per_mb, na.rm = TRUE), 2), "mut/Mb\n")
+cat("   Median:", round(median(all_cohort_tmb$tmb_per_mb, na.rm = TRUE), 2), "mut/Mb\n")
+cat("   Range:", round(min(all_cohort_tmb$tmb_per_mb, na.rm = TRUE), 2), "-", 
+    round(max(all_cohort_tmb$tmb_per_mb, na.rm = TRUE), 2), "mut/Mb\n\n")
+
+# Clinical categories
+tmb_high_10 <- sum(all_cohort_tmb$tmb_per_mb >= 10, na.rm = TRUE)
+tmb_high_20 <- sum(all_cohort_tmb$tmb_per_mb >= 20, na.rm = TRUE)
+tmb_high_50 <- sum(all_cohort_tmb$tmb_per_mb >= 50, na.rm = TRUE)
+
+cat("TMB Categories:\n")
+cat("   TMB-High (≥10 mut/Mb):", tmb_high_10, "samples (", 
+    round(100 * tmb_high_10 / length(cohort_ids), 1), "%)\n")
+cat("   Very High (≥20 mut/Mb):", tmb_high_20, "samples (", 
+    round(100 * tmb_high_20 / length(cohort_ids), 1), "%)\n")
+cat("   Ultra-high (≥50 mut/Mb):", tmb_high_50, "samples (", 
+    round(100 * tmb_high_50 / length(cohort_ids), 1), "%)\n\n")
+  
+  
+cat("Clinical TMB categories (approximate with WES denominator):\n")
+cat(" TMB-High ≥10 mut/Mb: Immunotherapy response predictor\n")
+cat(" Very High ≥20 mut/Mb: Suggests MSI-high/Lynch syndrome\n")
+cat(" Ultra-high ≥50 mut/Mb: Suggests POLE/POLD1 deficiency\n\n")
+cat(" Note: ≥10 mut/Mb is from panel essays; WES estimates may not be directly interchangeable.\n\n")
+
+# Summary
+cat("Tumor Mutation Burden (TMB) — non-synonymous, deduplicated, PASS-only if available:\n")
+cat("   Mean TMB:", round(mean(mutations_per_sample$tmb_per_mb, na.rm=TRUE), 2), "mut/Mb\n")
+cat("   Median TMB:", round(median(mutations_per_sample$tmb_per_mb, na.rm=TRUE), 2), "mut/Mb\n")
+cat("   Range:", round(min(mutations_per_sample$tmb_per_mb, na.rm=TRUE), 2), "-", 
+    round(max(mutations_per_sample$tmb_per_mb, na.rm=TRUE), 2), "mut/Mb\n\n")
+
+# Heuristic buckets (denominator; not directly interchangeable with panel cutoffs)
+tmb_high_10  <- sum(mutations_per_sample$tmb_per_mb >= 10,  na.rm=TRUE)  # FDA (panel-based) heuristic
+tmb_high_20  <- sum(mutations_per_sample$tmb_per_mb >= 20,  na.rm=TRUE)  # MSI-high typical
+tmb_high_50  <- sum(mutations_per_sample$tmb_per_mb >= 50,  na.rm=TRUE)  # Ultra-hypermutated (e.g., POLE/POLD1)
+
+cat("   WXS estimates may differ due to methodology\n\n")
+
+
+################################################################################
+# 6. CROSS-TABULATION: MMR vs DRIVER GENES
+################################################################################
+
+
+# Get sample lists for each gene group
+braf_samples <- unique(substr(
+    mutation_cohort$Tumor_Sample_Barcode[mutation_cohort$Hugo_Symbol == "BRAF"], 1, 12))
+kras_samples <- unique(substr(
+    mutation_cohort$Tumor_Sample_Barcode[mutation_cohort$Hugo_Symbol == "KRAS"], 1, 12))
+
+cat("   KEY OVERLAPS:\n")
+cat("   Lynch core + BRAF:", length(intersect(lynch_samples, braf_samples)), "samples\n")
+cat("   Lynch core + KRAS:", length(intersect(lynch_samples, kras_samples)), "samples\n")
+cat("   BRAF + KRAS:", length(intersect(braf_samples, kras_samples)), 
+    "samples (rare - usually exclusive)\n\n")
+
+################################################################################
+# 7. SUMMARY FOR CLUSTERING
+################################################################################
+
+cat("≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠\n")
+cat("    MUTATION SUMMARY FOR CLUSTERING      \n")
+cat("≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠\n\n")
+
+cat(" The 292-sample cohort breakdown:\n\n")
+
+cat("DNA REPAIR MUTATIONS:\n")
+cat("  Lynch core (MLH1/MSH2/MSH6/PMS2/EPCAM):", length(lynch_samples), "samples\n")
+cat("  All MSI-related genes:", length(all_msi_samples), "samples\n")
+cat("  High TMB (>100 muts):", high_tmb_100, "samples\n\n")
+
+cat("ONCOGENIC DRIVERS:\n")
+cat("  BRAF mutations:", length(braf_samples), "samples\n")
+cat("  KRAS mutations:", length(kras_samples), "samples\n\n")
+
+cat("CLUSTERING VALIDATION:\n")
+cat("  Cluster 1 (Lynch-like):\n")
+cat("    MMR mutations + High TMB + Young age\n")
+cat("  Cluster 2 (CIMP-high):\n")
+cat("    BRAF mutations + MLH1 hypermethylation\n")
+cat("  Cluster 3 (Sporadic):\n")
+cat("    KRAS mutations + Chromosomal instability\n\n")
+
+cat("🧽 Ready for Methylation Quality Control (QC) and Cleaning!\n\n")
+
+# Next steps:
+cat(" NEXT STEP: Methylation QC pipeline\n")
+cat("   Filter probes, normalize, select top 10K variables\n")
+
+#getwd()
+
+#setwd("~/../TCGA_COAD_Thesis/00_Raw_Data")
+
+
+# Create the processed data folder
+dir.create("01_Processed_Data", showWarnings = FALSE)
+
+# Save key sample lists
+saveRDS(cohort_ids, "01_Processed_Data/cohort_ids_292.rds")
+saveRDS(lynch_samples, "01_Processed_Data/lynch_samples.rds")
+saveRDS(braf_samples, "01_Processed_Data/braf_samples.rds")
+saveRDS(kras_samples, "01_Processed_Data/kras_samples.rds")
+saveRDS(all_msi_samples, "01_Processed_Data/all_msi_samples.rds")
+
+# Save clinical data for cohort
+clinical_cohort <- clinical[clinical$bcr_patient_barcode %in% cohort_ids, ]
+saveRDS(clinical_cohort, "01_Processed_Data/clinical_cohort_292.rds")
+write.csv(clinical_cohort, "01_Processed_Data/clinical_cohort_292.csv", row.names = FALSE)
+
+# Save summary mutation
+mutation_summary <- data.frame(
+  patient_id = cohort_ids,
+  has_lynch_core = cohort_ids %in% lynch_samples,
+  has_msi_related = cohort_ids %in% all_msi_samples,
+  has_braf = cohort_ids %in% braf_samples,
+  has_kras = cohort_ids %in% kras_samples
+)
+
+saveRDS(mutation_summary, "01_Processed_Data/mutation_summary_292.rds")
+write.csv(mutation_summary, "01_Processed_Data/mutation_summary_292.csv", row.names = FALSE)
+
+cat("\n ✅ ALL EXPLORATION RESULTS SAVED!\n\n")
+cat("Files saved to 01_Processed_Data/:\n")
+cat("  cohort_ids_292.rds\n")
+cat("  lynch_samples.rds\n")
+cat("  braf_samples.rds\n")
+cat("  kras_samples.rds\n")
+cat("  all_msi_samples.rds\n")
+cat("  clinical_cohort_292.rds/.csv\n")
+cat("  mutation_summary_292.rds/.csv\n\n")
+
+
+```
