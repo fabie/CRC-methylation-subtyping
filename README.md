@@ -93,17 +93,18 @@ Data acquisition required:
 
 ---
 
-## Quality Control Pipeline (7 Steps)
+## Quality Control Pipeline (7-8 Steps)
 
 | Step | Process | Purpose |
 |------|---------|---------|
 | 1 | Sample quality assessment | Retain tumor samples only (code 01), exclude normal tissue |
-| 2 | Probe detection p-value filtering | Remove probes with >10% samples failing detection (p > 0.01) |
+| 2 | Probe detection p-value filtering | Remove probes with >10% samples failing detection  |
 | 3 | SNP probe removal | Remove probes containing known SNPs (Zhou et al., 2017) |
 | 4 | Cross-reactive probe removal | Eliminate probes mapping to multiple genomic locations (Chen et al., 2013) |
 | 5 | Sex chromosome exclusion | Remove X/Y probes to avoid sex-based clustering artifacts |
-| 6 | BMIQ normalization | Adjust Type II probe values to match Type I distribution (wateRmelon package) |
-| 7 | Variance-based selection | Select top 10,000 most variable probes for clustering |
+| 6 | Beta-Mixture Quantile (BMIQ) normalization | Adjust Type II probe values to match Type I distribution (wateRmelon package) |
+| 7 | (Optional) Additional sanitization (for instance imputing NA) |
+| 8 | Variance-based selection | Select top 10,000 most variable probes for clustering |
 
 ---
 
@@ -132,7 +133,7 @@ Consensus clustering addresses instability in unsupervised methods through repea
 
 **Parameters:**
 
-- Number of clusters evaluated: k = 2–10
+- Number of clusters evaluated: k = 2 – 10
 - Resampling proportion: 80% samples × 80% probes
 - Iterations per k: 1,000
 - Final partitioning: Hierarchical clustering on consensus matrix
@@ -191,29 +192,36 @@ Discovered subtypes show significant associations with established molecular mar
 ## Project Structure
 
 ```
-├── README.md                        # main landing page for the project and repository
-├── LICENSE                          # MIT licence for academic use
-├── .gitignore                       # R context, which files to ignore and not track
-├── renv.lock                        # R packages management
+CRC-methylation-subtyping/
+│
+├── 01_data_acquisition/             # TCGA download and initial processing
+│
+├── 02_quality_control/              # 7-step QC pipeline
+│
+├── 03_consensus_clustering/         
+│
+├── 04_internal_validation/            
+│
+├── 05_external_validation/
 │
 ├── data/
 │   └── README.md                    # instructions for TCGA data download
 │
-├── analysis/
-│   ├── 01_data_acquisition.Rmd      # TCGA download and initial processing
-│   ├── 02_quality_control.Rmd       # 7-step QC pipeline
-│   ├── 03_consensus_clustering.Rmd  # self-explanatory (ref. main README file)
-│   ├── 04_internal_validation.Rmd   # self-explanatory (ref. main README file)
-│   └── 05_external_validation.Rmd   # self-explanatory (ref. main README file)
-│
-├── R/
-│   └── helper_functions.R           # reusable utility functions
-│
-├── output/
+├── results/
 │   └── figures/                     # pertinent plots and figures
+│   │   └── README.md
+│   │   
+│   └── tables/
+│       └── ref. tables
 │
-└── docs/
-    └── supplementary_materials/     # literature references
+├── .gitignore                       # R context, which files to ignore and not track
+├── LICENSE                          # MIT licence for academic use
+├── README.md                        # main landing page for the project and repository
+├── R/
+│   └── helper_functions.R           # reusable utility function
+│
+└── reference_lit.md/                # literature references
+
 ```
 
 ---
@@ -252,7 +260,6 @@ Discovered subtypes show significant associations with established molecular mar
 ## Future Directions
 
 This proof-of-concept establishes the methodological foundation. Next steps include:
-
 - Validation on independent veteran cohorts
 - Integration with exposure history data
 - Development of a classification model for prospective use
@@ -264,7 +271,7 @@ This proof-of-concept establishes the methodological foundation. Next steps incl
 
 This project was completed as part of the Master of Science in Data Science program at Regis University's Anderson College of Business and Computing.
 
-**Author:** Fabienne Van Cappel  
+**Author:** Fabienne van Cappel  
 **Program:** Master of Science in Data Science (MSDS), Regis University  
 **Graduation:** Winter 2025
 
