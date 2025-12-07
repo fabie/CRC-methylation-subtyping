@@ -1,0 +1,562 @@
+---
+title: "Data Visualization (Phase3)"
+author: "Fabie Van Cappel"
+date: "November 2025"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+toc: true
+number_sections: true
+keep_tex: true
+---
+
+
+```{r}
+
+################################################################################
+# Phase 3: 1. Age & Gender Distribution
+################################################################################
+
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+library(readr)
+library(forcats)
+library(stringr)
+library(scales)
+library(knitr)
+library(RColorBrewer)
+library(UpSetR)
+
+
+# Library: here
+#readRDS(here::here("clinical", "COAD_clinical.rds")) # For portability
+
+#setwd() is not portable
+#setwd("/../TCGA_COAD_Thesis/00_Raw_Data/01_Processed_Data")
+
+# List the files
+list.files()
+file.exists("clinical_cohort_292.csv") 
+
+# Load the clinical cohort data
+clinical_data <- read.csv("clinical_cohort_292.csv", stringsAsFactors = FALSE)
+
+# Quick count of missing values (NA)
+sum(is.na(clinical_data$age_at_diagnosis))
+sum(is.na(clinical_data$gender))
+
+# More detailed summary about age and gender
+cat("Missing Age:", sum(is.na(clinical_data$age_at_diagnosis)), "\n")
+cat("Missing Gender:", sum(is.na(clinical_data$gender)), "\n")
+
+# Check for empty strings or "not reported" (common in clinical data)
+sum(clinical_data$gender == "" | is.na(clinical_data$gender))
+sum(clinical_data$gender == "not reported", na.rm = TRUE)
+
+# Count complete cases (no missing age AND no missing gender)
+complete_cases <- clinical_data %>%
+  filter(!is.na(age_at_diagnosis) & 
+         !is.na(gender) & 
+         gender != "not reported")
+cat("Complete cases:", nrow(complete_cases), "\n")
+cat("Incomplete cases:", nrow(clinical_data) - nrow(complete_cases), "\n")
+
+# Data Preparation
+# Convert age from days to years and clean the data
+clinical_clean <- clinical_data %>%
+  mutate(
+    # Convert age_at_diagnosis from days to years
+    age_years = age_at_diagnosis / 365.25,
+    # Clean gender variable
+    gender_clean = case_when(
+      tolower(gender) == "male" ~ "Male",
+      tolower(gender) == "female" ~ "Female",
+      TRUE ~ "Not Reported"
+    )
+  )
+  
+# Show with patient ID for context
+clinical_data %>%
+select(submitter_id, age_at_diagnosis, gender) %>% head(10)
+
+  
+# Show me the top 10 rows of age and gender in a table
+library(knitr)
+
+head(clinical_data[, c("age_at_diagnosis", "gender")], 10)
+
+clinical_data %>%
+  mutate(age_years = round(age_at_diagnosis / 365.25, 1)) %>%
+  select(Patient_ID = submitter_id, 
+         Age_Days = age_at_diagnosis, 
+         Age_Years = age_years, 
+         Gender = gender) %>%
+  head(10) %>%
+  kable()
+  
+  
+# How many rows missing values in age and gender
+cat("Total patients:", nrow(clinical_data), "\n\n")
+
+cat("Rows with missing AGE:", sum(is.na(clinical_data$age_at_diagnosis)), "\n")
+
+cat("Rows with missing GENDER:", sum(is.na(clinical_data$gender)), "\n")
+
+# Show patient IDs with missing age
+clinical_data %>% filter(is.na(age_at_diagnosis)) %>% select(submitter_id, age_at_diagnosis, gender) %>%
+print()
+
+# Convert age from days to years and clean the data
+clinical_clean <- clinical_data %>%
+  mutate(
+    
+    # Convert age_at_diagnosis from days to years
+    age_years = age_at_diagnosis / 365.25,
+    
+    # Clean gender variable
+    gender_clean = case_when(
+      tolower(gender) == "male" ~ "Male",
+      tolower(gender) == "female" ~ "Female",
+      TRUE ~ "Not Reported"
+    )
+  ) %>%
+
+# Remove rows with missing age or gender
+filter(!is.na(age_years) & gender_clean != "Not Reported")
+  
+# Calculate summary statistics
+summary_stats <- clinical_clean %>%
+  group_by(gender_clean) %>%
+  summarise(
+    n = n(),
+    mean_age = mean(age_years, na.rm = TRUE),
+    median_age = median(age_years, na.rm = TRUE),
+    sd_age = sd(age_years, na.rm = TRUE),
+    min_age = min(age_years, na.rm = TRUE),
+    max_age = max(age_years, na.rm = TRUE)
+  )
+
+# Print summary statistics
+cat("\n=== Summary Statistics ===\n")
+print(summary_stats)
+cat("\nTotal patients:", nrow(clinical_clean), "\n")
+
+# Define color palette
+gender_colors <- c("Male" = "#4A90E2", "Female" = "#E24A90")
+
+# Visualizatiojn with ggplot2
+# 1. Age Distribution Histogram by Gender
+p1 <- ggplot(clinical_clean, aes(x = gender, y = age_years, fill = gender)) +
+  geom_violin(trim = TRUE, alpha = 0.8) +
+  geom_boxplot(width = 0.15, color = "grey20", outlier.shape = NA) +
+  stat_summary(fun = median, geom = "point", size = 2.5, color = "black", fill = "white", shape = 21) +
+  labs(
+    title = "Age Distribution by Gender",
+    x = "Gender",
+    y = "Age (years)"
+  ) +
+  scale_fill_brewer(palette = "Set2", guide = "none") +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    panel.grid.major = element_line(color = "grey90"),
+    axis.title = element_text(face = "bold")
+  )
+
+print(p1)
+
+# 2. Density Plot for Age Distribution
+p2 <- ggplot(clinical_clean, aes(x = age_years, fill = gender_clean)) +
+  geom_density(alpha = 0.6) +
+  scale_fill_manual(values = gender_colors) +
+  labs(
+    title = "Age Density Distribution by Gender",
+    x = "Age at Diagnosis (years)",
+    y = "Density",
+    fill = "Gender"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    legend.position = "top",
+    panel.grid.minor = element_blank()
+  )
+
+# 3. Box Plot for Age by Gender
+p3 <- ggplot(clinical_clean, aes(x = gender_clean, y = age_years, fill = gender_clean)) +
+  geom_boxplot(alpha = 0.7, outlier.shape = 16, outlier.size = 2) +
+  geom_jitter(width = 0.2, alpha = 0.3, size = 1) +
+  scale_fill_manual(values = gender_colors) +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 3, 
+               fill = "white", color = "black") +
+  labs(
+    title = "Age Distribution Comparison by Gender",
+    subtitle = "Diamond indicates mean age",
+    x = "Gender",
+    y = "Age at Diagnosis (years)",
+    fill = "Gender"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 10, color = "gray40"),
+    legend.position = "none",
+    panel.grid.minor = element_blank()
+  )
+
+# 4. Gender Distribution Bar Chart
+gender_counts <- clinical_clean %>%
+  count(gender_clean) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+p4 <- ggplot(gender_counts, aes(x = gender_clean, y = n, fill = gender_clean)) +
+  geom_bar(stat = "identity", alpha = 0.8) +
+  geom_text(aes(label = paste0(n, "\n(", round(percentage, 1), "%)")),
+            vjust = -0.5, size = 4, fontface = "bold") +
+  scale_fill_manual(values = gender_colors) +
+  labs(
+    title = "Gender Distribution",
+    subtitle = paste("Total patients:", sum(gender_counts$n)),
+    x = "Gender",
+    y = "Count",
+    fill = "Gender"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 11, color = "gray40"),
+    legend.position = "none",
+    panel.grid.minor = element_blank()
+  ) +
+  ylim(0, max(gender_counts$n) * 1.15)
+
+# 5. Violin Plot with Box Plot overlay
+p5 <- ggplot(clinical_clean, aes(x = gender_clean, y = age_years, fill = gender_clean)) +
+  geom_violin(alpha = 0.6, trim = FALSE) +
+  geom_boxplot(width = 0.2, alpha = 0.8, outlier.shape = NA) +
+  scale_fill_manual(values = gender_colors) +
+  labs(
+    title = "Age Distribution: Violin Plot by Gender",
+    x = "Gender",
+    y = "Age at Diagnosis (years)",
+    fill = "Gender"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    legend.position = "none",
+    panel.grid.minor = element_blank()
+  )
+
+# Display all plots
+print(p1)
+print(p2)
+print(p3)
+print(p4)
+print(p5)
+
+# Save all plots (1 - 5)
+ggsave("age_histogram.png", p1, width = 10, height = 6, dpi = 300)
+ggsave("age_density.png", p2, width = 10, height = 6, dpi = 300)
+ggsave("age_boxplot.png", p3, width = 8, height = 6, dpi = 300)
+ggsave("gender_distribution.png", p4, width = 8, height = 6, dpi = 300)
+ggsave("age_violin.png", p5, width = 8, height = 6, dpi = 300)
+
+# Statistical test: age between genders
+# Welch 2-sample test
+cat("\n  Statistical Test\n")
+t_test_result <- t.test(age_years ~ gender_clean, data = clinical_clean)
+print(t_test_result)
+
+################################################################################
+# Phase 3: 2. Tumor Stage Composition
+################################################################################
+
+cat("≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠\n")
+cat("     DATA PREPARATION      \n")
+cat("≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠\n\n")
+
+# Clean and categorize stage data
+# Extract main stage group (I, II, III, IV)
+# We have Satge 1A, 1B, 1C variation
+stage_clean <- clinical_data %>%
+  # Remove rows with missing stage
+  filter(!is.na(ajcc_pathologic_stage) & ajcc_pathologic_stage != "") %>%
+  # Clean up and standardize stage names
+  mutate(
+    stage_full = ajcc_pathologic_stage, #clean stage names
+    stage_main = case_when(
+      str_detect(stage_full, "Stage I[^IV]|Stage I$") ~ "Stage I", # stage 1" followed by any character except,  I or V, end of string (no characters after)
+      str_detect(stage_full, "Stage II") ~ "Stage II",
+      str_detect(stage_full, "Stage III") ~ "Stage III",
+      str_detect(stage_full, "Stage IV") ~ "Stage IV",
+      TRUE ~ "Unknown"
+    )
+  )    
+
+    # Clean and categorize stage data
+stage_clean <- clinical_data %>%
+  # Remove rows with missing stage
+  filter(!is.na(ajcc_pathologic_stage) & ajcc_pathologic_stage != "") %>%
+  mutate(
+    # Clean stage names
+    stage_full = ajcc_pathologic_stage,
+    
+    # Extract main stage group (I, II, III, IV)
+    stage_main = case_when(
+      str_detect(stage_full, "Stage I[^IV]|Stage I$") ~ "Stage I",
+      str_detect(stage_full, "Stage II") ~ "Stage II",
+      str_detect(stage_full, "Stage III") ~ "Stage III",
+      str_detect(stage_full, "Stage IV") ~ "Stage IV",
+      TRUE ~ "Unknown"
+    ),
+    
+    # Create ordered factor for proper sorting
+    stage_main = factor(stage_main, 
+                       levels = c("Stage I", "Stage II", "Stage III", "Stage IV", "Unknown")),
+    
+    # Clean gender for subgroup analysis
+    gender_clean = case_when(
+      tolower(gender) == "male" ~ "Male",
+      tolower(gender) == "female" ~ "Female",
+      TRUE ~ "Not Reported"
+    )
+  ) %>%
+  filter(stage_main != "Unknown")
+
+# Verify data
+cat("Total patients with stage data:", nrow(stage_clean), "\n")
+cat("Patients excluded (missing stage):", nrow(clinical_data) - nrow(stage_clean), "\n\n")
+
+# Filter out missing stages
+stage_clean <- clinical_data %>%
+  filter(!is.na(ajcc_pathologic_stage) & ajcc_pathologic_stage != "")
+
+# Check it worked
+cat("After filtering missing:", nrow(stage_clean), "\n")
+
+# Add the stage_full column
+stage_clean <- stage_clean %>%
+  mutate(stage_full = ajcc_pathologic_stage)
+
+# Extract main stage groups
+stage_clean <- stage_clean %>%
+  mutate(
+    stage_main = case_when(
+      str_detect(stage_full, "Stage I[^IV]|Stage I$") ~ "Stage I",
+      str_detect(stage_full, "Stage II") ~ "Stage II",
+      str_detect(stage_full, "Stage III") ~ "Stage III",
+      str_detect(stage_full, "Stage IV") ~ "Stage IV",
+      TRUE ~ "Unknown"
+    )
+  )
+
+# Verify
+table(stage_clean$stage_main)
+
+# Step 3d: Make ordered factor
+stage_clean <- stage_clean %>%
+  mutate(
+    stage_main = factor(stage_main, 
+                       levels = c("Stage I", "Stage II", "Stage III", "Stage IV", "Unknown"))
+  )
+
+# Filter out Unknown
+stage_clean <- stage_clean %>%
+  filter(stage_main != "Unknown")
+
+# Final check
+cat("Final stage_clean rows:", nrow(stage_clean), "\n")
+table(stage_clean$stage_main)
+
+
+cat(" ===== SUMMARY STATISTICS =====\n")
+
+
+# Overall stage distribution
+stage_summary <- stage_clean %>%
+  count(stage_main) %>%
+  mutate(
+    percentage = n / sum(n) * 100,
+    label = paste0(n, " (", round(percentage, 1), "%)")
+  ) %>%
+  arrange(stage_main)
+
+cat("===== STAGE DISTRIBUTION =====\n")
+print(stage_summary)
+
+# Detailed substage distribution
+substage_summary <- stage_clean %>%
+  count(stage_full) %>%
+  mutate(percentage = n / sum(n) * 100) %>%
+  arrange(desc(n))
+
+cat("\n===== TOP 10 DETAILED STAGES =====\n")
+print(head(substage_summary, 10))
+
+cat("===== DEFINE COLOR SCHEME =====\n")
+
+# Color gradient for stages (light to dark = early to late)
+stage_colors <- c(
+  "Stage I" = "#90EE90",    # light green
+  "Stage II" = "#FFD700",   # gold/Yellow
+  "Stage III" = "#FF8C00",  # dark orange
+  "Stage IV" = "#DC143C"    # crimson red
+)
+
+cat(" ===== HORIZONTAL BAR CHART =====\n")
+
+p21 <- ggplot(stage_summary, aes(x = n, y = fct_rev(stage_main), fill = stage_main)) +
+  geom_bar(stat = "identity", alpha = 0.8, width = 0.9) + # transparency 20% (0 = invisible, 1 = solid)
+  geom_text(aes(label = label), hjust = 1.1, size = 4, color = "black") +
+  scale_fill_manual(values = stage_colors) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.15))) +
+  labs(
+    title = "Tumor Stage Distribution",
+    subtitle = paste("TCGA-COAD Cohort (n =", nrow(stage_clean), "patients)"),
+    x = "Number of Patients",
+    y = NULL,
+    caption = "AJCC Pathologic Stages"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    plot.subtitle = element_text(color = "gray40", size = 12),
+    legend.position = "none",
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 13, face = "bold"))
+  
+
+print(p21)
+
+# Save it
+ggsave("stage_distribution_horizontal.png", p21, width = 10, height = 6, dpi = 300)
+
+
+################################################################################
+# Phase 3: 3. Mutation Frequency Plot
+################################################################################
+
+
+# Load the mutation data
+mut_data <- read.csv("mutation_summary_292.csv", stringsAsFactors = FALSE)
+
+cat("Data loaded successfully.\n")
+cat("Total samples:", nrow(mut_data), "\n\n")
+
+cat(" ===== CALCULATE MUTATION FREQUENCIES =====\n")
+
+# Calculate frequency for each mutation category
+mutation_freq <- data.frame(
+  Mutation_Type = c("Lynch Core Genes", "MSI-Related", "BRAF", "KRAS"),
+  Count = c(
+    sum(mut_data$has_lynch_core),
+    sum(mut_data$has_msi_related),
+    sum(mut_data$has_braf),
+    sum(mut_data$has_kras)
+  ),
+  Total = rep(nrow(mut_data), 4)
+)
+
+mutation_freq$Percentage <- (mutation_freq$Count / mutation_freq$Total) * 100
+mutation_freq$Mutation_Type <- factor(mutation_freq$Mutation_Type, 
+                                      levels = mutation_freq$Mutation_Type[order(-mutation_freq$Percentage)])
+
+# Print summary
+cat("===== MUTATION FREQUENCIES =====\n")
+print(mutation_freq)
+cat("\n")
+
+cat(" ===== MAIN FREQUENCY BARPLOT =====\n")
+
+p31 <- ggplot(mutation_freq, aes(x = Mutation_Type, y = Percentage, fill = Mutation_Type)) +
+  geom_bar(stat = "identity", color = "black", size = 0.5, width = 0.7) +
+  geom_text(aes(label = paste0(Count, "\n(", round(Percentage, 1), "%)")),
+            vjust = -0.3, size = 4.5, fontface = "bold") +
+  scale_fill_manual(values = c(
+    "Lynch Core Genes" = "#C73E1D",  # Red for inherited
+    "MSI-Related" = "#F18F01",        # Orange
+    "BRAF" = "#2E86AB",               # Blue for CIMP marker
+    "KRAS" = "#6A994E"                # Green
+  )) +
+  labs(
+    title = "Mutation Frequencies in TCGA Colorectal Cancer Cohort",
+    subtitle = paste0("n = ", nrow(mut_data), " samples"),
+    x = "",
+    y = "Percentage of Samples (%)",
+    caption = "Lynch Core: MLH1, MSH2, MSH6, PMS2 | BRAF: Key CIMP marker"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 16),
+    plot.subtitle = element_text(hjust = 0.5, color = "gray40", size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    legend.position = "none",
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(hjust = 0, face = "italic", size = 9)
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.15)), 
+                     breaks = seq(0, 100, 10))
+
+print(p31)
+ggsave("31_mutation_frequencies.png", p31, width = 10, height = 7, dpi = 300, bg = "white")
+
+cat(" ===== CO-OCCURRENCE ANALYSIS =====\n")
+
+# Create co-occurrence matrix
+co_occur <- mut_data %>%
+  select(has_lynch_core, has_msi_related, has_braf, has_kras) %>%
+  mutate(across(everything(), as.integer))
+
+# Calculate pairwise co-occurrence
+gene_pairs <- data.frame(
+  Pair = c("Lynch & MSI", "Lynch & BRAF", "Lynch & KRAS", 
+           "MSI & BRAF", "MSI & KRAS", "BRAF & KRAS"),
+  Count = c(
+    sum(mut_data$has_lynch_core & mut_data$has_msi_related),
+    sum(mut_data$has_lynch_core & mut_data$has_braf),
+    sum(mut_data$has_lynch_core & mut_data$has_kras),
+    sum(mut_data$has_msi_related & mut_data$has_braf),
+    sum(mut_data$has_msi_related & mut_data$has_kras),
+    sum(mut_data$has_braf & mut_data$has_kras)
+  )
+)
+
+gene_pairs$Percentage <- (gene_pairs$Count / nrow(mut_data)) * 100
+gene_pairs$Pair <- factor(gene_pairs$Pair, levels = gene_pairs$Pair[order(-gene_pairs$Count)])
+
+p32 <- ggplot(gene_pairs, aes(x = Pair, y = Percentage, fill = Pair)) +
+  geom_bar(stat = "identity", color = "black", size = 0.5, width = 0.7) +
+  geom_text(aes(label = paste0(Count, "\n(", round(Percentage, 1), "%)")),
+            vjust = -0.3, size = 4) +
+  labs(
+    title = "Co-occurrence of Mutation Patterns",
+    subtitle = "Percentage of samples with both mutations",
+    x = "Gene Pair",
+    y = "Co-occurrence (%)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5, color = "gray40", size = 11),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none",
+    panel.grid.major.x = element_blank()
+  ) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.15)))
+
+print(p32)
+ggsave("32_mutation_cooccurrence.png", p32, width = 10, height = 7, dpi = 300, bg = "white")
+
+
+writeLines(c(
+  "╔════════════════════════════════════════╗",
+  "║      Visualization Complete!🤓         ║",
+  "╚════════════════════════════════════════╝"
+))
+
+```
