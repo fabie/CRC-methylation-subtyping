@@ -1,0 +1,553 @@
+---
+title: "Methylation QC (Phase3)"
+author: "Fabie Van Cappel"
+date: "November 2025"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+toc: true
+number_sections: true
+keep_tex: true
+---
+
+
+```{r, methylation qc}
+
+################################################################################
+# Week 3 Phase 3: Methylation Quality Control (QC)
+# This is reference to Proposal Appendix 1 - Data Cleaning and Quality Control Procedures
+# Based on Best Practices Methylation QC: Standard preprocessing for Illumina 450K methylation arrays
+# CHECKLIST:
+# Detection p-value filtering
+# Single Nucleo-protein (SNP) probe removal (Zhou et al. 2017)
+# Cross-reactive probe removal (Chen et al. 2013)
+# Sex chromosome probe removal
+# Beta-Mixture Quantile - BMIQ normalization (Chen et al. 2013) 
+# Variable probe selection
+################################################################################
+
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("minfi")
+
+BiocManager::valid()
+
+library(SummarizedExperiment)
+library(minfi)
+library(wateRmelon) # for Illumina HumanMethylation450K array
+library(matrixStats)
+
+#setwd() is not portable
+#setwd("/../TCGA_COAD_Thesis/00_Raw_Data/01_Processed_Data")
+
+
+cat(" ===== BEST PRACTICE METHYLATION QUALITY CONTROL =====\n")
+
+
+################################################################################
+# STEP 0: Load Data and Cohort IDs
+################################################################################
+
+# Load methylation data
+methylation <- readRDS("methylation/COAD_methylation_raw.rds")
+beta_values <- assay(methylation)
+
+# Load cohort IDs
+cohort_ids <- readRDS("../01_Processed_Data/cohort_ids_292.rds")
+
+cat("Starting data dimensions:\n")
+cat("  Probes:", nrow(beta_values), "\n")
+cat("  Samples:", ncol(beta_values), "\n")
+cat("  Missing:", sum(is.na(beta_values)), 
+    "(", round(100*sum(is.na(beta_values))/length(beta_values), 2), "%)\n\n")
+
+################################################################################
+# STEP 1: Filter to Tumor Samples Only
+################################################################################
+
+
+# Get sample IDs
+sample_ids <- colnames(beta_values)
+
+# Extract patient IDs and sample types
+# Format: TCGA-XX-XXXX-01A (01 = tumor, 11 = normal)
+sample_info <- data.frame(
+  full_id = sample_ids,
+  patient_id = substr(sample_ids, 1, 12),
+  sample_type = substr(sample_ids, 14, 15)
+)
+
+cat("Sample types:\n")
+print(table(sample_info$sample_type))
+cat("\n")
+
+# Keep primary tumors (01A) and filter to our cohort
+tumor_samples <- sample_info %>%
+  filter(sample_type == "01") %>%
+  filter(patient_id %in% cohort_ids)
+
+cat("Filtering:\n")
+cat("  Original samples:", ncol(beta_values), "\n")
+cat("  Tumor samples:", nrow(tumor_samples), "\n")
+cat("  In our cohort:", sum(tumor_samples$patient_id %in% cohort_ids), "\n\n")
+
+# Filter beta values
+beta_values <- beta_values[, tumor_samples$full_id]
+
+cat("After tumor filtering:\n")
+cat("  Probes:", nrow(beta_values), "\n")
+cat("  Samples:", ncol(beta_values), "\n\n")
+
+################################################################################
+# STEP 2: Remove Probes with High Missing Values
+################################################################################
+
+# Calculate missing percentage per probe
+missing_per_probe <- rowSums(is.na(beta_values)) / ncol(beta_values)
+
+cat("Missing Value Distribution:\n")
+cat("  0% missing:", sum(missing_per_probe == 0), "probes\n")
+cat("  <5% missing:", sum(missing_per_probe < 0.05), "probes\n")
+cat("  5-10% missing:", sum(missing_per_probe >= 0.05 & missing_per_probe < 0.10), "probes\n")
+cat("  >10% missing:", sum(missing_per_probe > 0.10), "probes\n\n")
+
+# Remove probes with >10% missing
+probes_keep <- missing_per_probe <= 0.10
+beta_values <- beta_values[probes_keep, ]
+
+cat("After missing filter (>10%):\n")
+cat("  Probes removed:", sum(!probes_keep), "\n")
+cat("  Probes remaining:", nrow(beta_values), "\n")
+cat("  Missing values:", sum(is.na(beta_values)), 
+    "(", round(100*sum(is.na(beta_values))/length(beta_values), 2), "%)\n\n")
+
+################################################################################
+# STEP 3: Remove SNP-Associated Probes
+# Reference: https://doi.org/10.1093/nar/gkw967
+################################################################################
+
+cat("Loading SNP probe list (Zhou et al. 2017)...\n")
+
+# Install once:
+# if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+# BiocManager::install(c("minfi","IlluminaHumanMethylation450kmanifest","IlluminaHumanMethylation450kanno.ilmn12.hg19"))
+
+library(minfi)
+library(S4Vectors)  # for DataFrame
+
+# Minimal sample metadata
+pd <- S4Vectors::DataFrame(row.names = colnames(beta_values))
+
+# Try 450k first (based on ~404k probes); fall back to EPIC
+grSet <- try(
+  makeGenomicRatioSetFromMatrix(
+    beta_values,
+    pData = pd,
+    what = "Beta",
+    annotation = c(array = "IlluminaHumanMethylation450k", annotation = "ilmn12.hg19")
+  ),
+  silent = TRUE
+)
+
+if (inherits(grSet, "try-error")) {
+  
+  # Illumina EPIC array fallback (if 450k fails):   # this is only a fallback!
+  grSet <- makeGenomicRatioSetFromMatrix(
+    beta_values,
+    pData = pd,
+    what = "Beta",
+    annotation = c(array = "IlluminaHumanMethylationEPIC", annotation = "ilm10b2.hg19")
+  )
+}
+
+# Call function dropLociWithSnps (expects Genomic*Set)
+grSet_filt <- dropLociWithSnps(grSet, snps = c("CpG","SBE","Probe"), maf = 0)
+
+# Get filtered beta matrix
+cat("\nAfter SNP filter:\n")
+beta_values <- getBeta(grSet_filt)
+cat("Probes remaining after SNP filter:", nrow(beta_values), "\n\n")
+
+saveRDS(beta_values, file = "beta_after_SNPfilter.rds")
+writeLines(intersect(rownames(beta_values), snp_probes), "snp_probes_removed.txt")
+
+
+
+################################################################################
+# STEP 4: Remove Cross-Reactive Probes
+# Load Chen et al. (2013) cross-reactive list
+# There are two ways of doing it: 1. Download the Chen et al. 2013 probe from GitHub
+#                                 2. Use the Champ library method.
+# We try with Champ first. 
+################################################################################
+
+
+cat("Loading cross-reactive probe list (Chen et al. 2013)...\n")
+
+# Download the file "48639-non-specific-probes-Illumina450k.csv" from GitHub
+# Reference: https://github.com/sirselim/illumina450k_filtering/blob/master/48639-non-specific-probes-Illumina450k.csv
+
+# Cross-reactive probes from Chen et al. 2013
+
+library(ChAMP)
+
+# beta_values: probes x samples, rownames are "cg######" IDs
+res <- ChAMP::champ_filter(
+  beta = beta_values,
+  pd = NULL,                 # do not use phenotype for filtering ("pd" stands for "pheno data")
+  filterSNPs = FALSE,        # we already removed SNPs in the step before
+  filterMultiHit = TRUE,     # removes cross-reactive (multi-hit) probes
+  autoimpute = FALSE
+)
+
+beta_values <- res$beta
+cat("After cross-reactive filter (ChAMP):", nrow(beta_values), "probes remain\n")
+
+saveRDS(beta_values, "beta_after_SNP_xreact_champ.rds")
+cat("Final probe count:", nrow(beta_values), "\n")
+
+################################################################################
+# STEP 5: Remove Sex Chromosome Probes
+################################################################################
+
+# Load annotation
+library(IlluminaHumanMethylation450kanno.ilmn12.hg19)
+anno <- getAnnotation(IlluminaHumanMethylation450kanno.ilmn12.hg19)
+
+# Keep only probes present in both annotation and your dataset
+common_ids <- intersect(rownames(beta_values), rownames(anno))
+length(common_ids)
+
+# Identify which of those are on sex chromosomes
+sex_chr_ids <- rownames(anno)[anno$chr %in% c("chrX", "chrY")]
+
+# Intersection with your dataset
+sex_in_data <- intersect(common_ids, sex_chr_ids)
+cat("Sex-chromosome probes overlapping your data:", length(sex_in_data), "\n")
+
+# Remove them
+beta_values <- beta_values[setdiff(rownames(beta_values), sex_in_data), ]
+cat("After removing X/Y probes:", nrow(beta_values), "probes remain\n")
+
+# Confirm no sex chromosome remain
+sum(anno[rownames(beta_values), "chr"] %in% c("chrX","chrY"), na.rm = TRUE)
+
+################################################################################
+# STEP 6: BMIQ Normalization
+################################################################################
+
+library(wateRmelon)
+# library(minfi)
+library(IlluminaHumanMethylation450kmanifest)
+
+#start_time <- Sys.time() end_time <- Sys.time()
+
+# Build Type I / Type II sets
+man   <- minfi::getManifest(IlluminaHumanMethylation450kmanifest)
+typeI <- minfi::getProbeInfo(man, type = "I")$Name
+typeII<- minfi::getProbeInfo(man, type = "II")$Name
+
+# Keep only probes we can classify
+keep_ids <- rownames(beta_values) %in% c(typeI, typeII)
+beta_bmiq <- beta_values[keep_ids, , drop = FALSE]
+
+design.v <- ifelse(rownames(beta_bmiq) %in% typeI, "I", "II")
+
+# Functon helper to compute safe nfit per sample
+# Computes nfit (safe_nfit) per sample as the min(valid Type I, valid Type II)
+safe_nfit <- function(betas, design, cap = 5000L) {
+  # valid (non-NA, finite) probes
+  v <- is.finite(betas) & !is.na(betas)
+  nI  <- sum(v & design == "I")
+  nII <- sum(v & design == "II")
+  # BMIQ needs samples from both classes; use the limiting class
+  max_fit <- min(nI, nII)
+  if (max_fit <= 50L) return(NA_integer_)  # too few data to fit reliably
+  as.integer(min(cap, max_fit))
+}
+
+#Run BMIQ sample-wise with adaptive nfit and safeguards
+bmiq_mat <- matrix(NA_real_, nrow = nrow(beta_bmiq), ncol = ncol(beta_bmiq),
+                   dimnames = dimnames(beta_bmiq))
+
+set.seed(1)
+for (j in seq_len(ncol(beta_bmiq))) {
+  bj <- beta_bmiq[, j]
+  nfit_j <- safe_nfit(bj, design.v, cap = 5000L)
+
+  if (is.na(nfit_j)) {
+    message(sprintf("Sample %s: too few valid Type I/II probes; skipping BMIQ.", colnames(beta_bmiq)[j]))
+    bmiq_mat[, j] <- bj  # keep original betas
+    next
+  }
+  
+  # Downstream statitical analysis
+  # Try Beta-mixture quantile-BMIQ function to correct bias in the Illumina 450k DNA methylation
+  # If it still fails, retry with smaller nfit and/or hydroxymethylation or doH=FALSE (to decide which samples or probes to be excluded)
+  res <- try(BMIQ(beta.v = bj, design.v = design.v, nL = 3, doH = TRUE, nfit = nfit_j), silent = TRUE)
+  if (inherits(res, "try-error")) {
+    nfit_j2 <- max(2000L, floor(nfit_j / 2))
+    res <- try(BMIQ(beta.v = bj, design.v = design.v, nL = 3, doH = TRUE, nfit = nfit_j2), silent = TRUE)
+  }
+  if (inherits(res, "try-error")) {
+    # Last resort: disable peak-height correction
+    res <- try(BMIQ(beta.v = bj, design.v = design.v, nL = 3, doH = FALSE, nfit = min(2000L, nfit_j)), silent = TRUE)
+  }
+  if (inherits(res, "try-error")) {
+    message(sprintf("Sample %s: BMIQ failed; keeping original betas.", colnames(beta_bmiq)[j]))
+    bmiq_mat[, j] <- bj
+  } else {
+    bmiq_mat[, j] <- res$nbeta
+  }
+}
+
+beta_bmiq_norm <- bmiq_mat
+
+# Verify & save
+stopifnot(all(beta_bmiq_norm >= 0 & beta_bmiq_norm <= 1, na.rm = TRUE))
+summary(as.numeric(beta_bmiq_norm))
+saveRDS(beta_bmiq_norm, "beta_bmiq_normalized.rds")
+cat("BMIQ completed. Normalized matrix dims:", dim(beta_bmiq_norm)[1], "x", dim(beta_bmiq_norm)[2], "\n")
+
+# Check time completion
+cat("\nBMIQ completed in", round(difftime(end_time, start_time, units = "mins"), 1), "minutes\n\n")
+
+################################################################################
+# STEP 7: Additional Sanitization
+#         a. Inspection
+#         b. Drop poor quality samples
+#         c. Impute missing values (for clean and dense clustering) ~ 0.19%
+################################################################################
+
+cat("≠≠≠≠≠ ADDITIONAL SANITIZATION ≠≠≠≠≠ \n")
+
+# 1. Inspect NA rates (per-sample and per-probe)
+dim(beta_bmiq_norm)  # probes x samples
+
+# NA % per sample
+na_samp <- colMeans(is.na(beta_bmiq_norm)) * 100
+summary(na_samp)
+head(sort(na_samp, decreasing = TRUE), 10)
+
+# NA % per probe
+na_probe <- rowMeans(is.na(beta_bmiq_norm)) * 100
+summary(na_probe)
+
+# 2. Drop poor-quality samples / probes
+
+keep_samples <- na_samp <= 10   # or may be 5
+keep_probes  <- na_probe <= 5   # or may be 1
+
+cat("Dropping samples:", sum(!keep_samples), "\n")
+cat("Dropping probes :", sum(!keep_probes),  "\n")
+
+beta_qc <- beta_bmiq_norm[keep_probes, keep_samples, drop = FALSE]
+dim(beta_qc)
+
+# 3. Do we need to impute the missing values?  (good question?)
+
+library(impute)
+
+sum(is.na(beta_qc))
+
+dim(beta_qc)
+
+prod(dim(beta_qc))
+
+# Fraction of missing values
+mean(is.na(beta_qc)) * 100
+
+# Conclusion: we have 189,085 missing values out of ~99 million total values
+# Total values: 98,901,630
+# Missing values: 189,085
+# Missing % ≈ 0.19%
+
+# Thus the data are 99.8% complete. This is a great quality dataset!
+# We have two options: 1. Drop the ~0.2% NA values
+#                      2. Impute NA with KNN (fine granulation for clustering)
+# Option 2: in case, we need to run PCA, heatmap, and clustering, to prevent any gap, we decide to run a quick imputation using K-Nearest Neighbors (KNN).
+
+beta_dense <- impute.knn(as.matrix(beta_qc))$data
+
+# Save file in TCGA_COAD_Thesis/00_Raw_Data/methylation folder
+saveRDS(beta_dense, "beta_final_dense_for_clustering.rds")
+cat("SAVE: beta_final_dense_for_clustering.rds\n")
+
+# Save probe names
+write.table(rownames(beta_final), 
+            "beta_final_dense_for_clustering.csv",
+            quote = FALSE, row.names = FALSE, col.names = FALSE)
+cat("SAVE: beta_final_dense_for_clustering.cvs\n")
+
+
+################################################################################
+# STEP 8: Variance for Top 10,000 Most Variable Probes
+################################################################################
+
+cat("Calculating variance for", nrow(beta_values), "probes...\n")
+
+# Calculate variance for each probe
+probe_var <- rowVars(beta_values, na.rm = TRUE)
+
+# Select top 10,000
+n_select <- 10000
+if(nrow(beta_values) < n_select) {
+  cat(" Only", nrow(beta_values), "probes available\n")
+  n_select <- nrow(beta_values)
+}
+
+# Get top variable probes
+top_probes <- order(probe_var, decreasing = TRUE)[1:n_select]
+beta_final <- beta_values[top_probes, ]
+
+cat("\nVariance distribution (top 10K probes):\n")
+cat("  Min:", round(min(probe_var[top_probes], na.rm = TRUE), 4), "\n")
+cat("  Median:", round(median(probe_var[top_probes], na.rm = TRUE), 4), "\n")
+cat("  Mean:", round(mean(probe_var[top_probes], na.rm = TRUE), 4), "\n")
+cat("  Max:", round(max(probe_var[top_probes], na.rm = TRUE), 4), "\n\n")
+
+# Save top 10K most variable probes
+saveRDS(beta_final, "methylation/beta_top10k_variable.rds")
+cat("✅ Saved: beta_top10k_variable.rds\n")
+
+# Save probe names
+write.table(rownames(beta_final), 
+            "qc_probe_names.txt",
+            quote = FALSE, row.names = FALSE, col.names = FALSE)
+cat("✅ Saved: qc_probe_names.txt\n")
+
+################################################################################
+# STEP 9: Quick Visualization: use Principal Component Analysis (PCA)
+################################################################################
+
+# Matrix for PCA/clustering
+mat <- if (exists("beta_dense")) beta_dense else beta_qc
+
+# Use matrixStats::rowVars
+if (requireNamespace("matrixStats", quietly = TRUE)) {
+  library(matrixStats)
+  probe_var <- rowVars(as.matrix(mat), na.rm = TRUE)
+  names(probe_var) <- rownames(mat)
+} else {
+  probe_var <- apply(mat, 1, var, na.rm = TRUE)
+}
+
+# Top K available (up to 10k)
+K <- min(10000L, sum(is.finite(probe_var)))
+top_ids <- names(sort(probe_var, decreasing = TRUE))[seq_len(K)]
+
+# Subset safely by probe IDs
+beta_var_top <- mat[top_ids, , drop = FALSE]
+
+# Quick variance summary for these top probes
+v <- probe_var[top_ids]
+cat("Variance (top", K, "probes) — Min:", round(min(v),4),
+    "Median:", round(median(v),4), "Mean:", round(mean(v),4),
+    "Max:", round(max(v),4), "\n")
+
+# PCA (requires no NAs)
+stopifnot(sum(is.na(beta_var_top)) == 0)  # if this fails, impute or drop NA rows first
+
+pca <- prcomp(t(beta_var_top), scale. = TRUE)
+summary(pca)
+
+# If no grouping variable exist, color by PC1 value
+p9 <- ggplot(pca_df, aes(PC1, PC2, color = PC1)) +
+  geom_point(size = 3.5, alpha = 0.85) +
+  scale_color_gradientn(colors = c("#3B9AB2", "#E1AF00", "#F21A00")) +  # teal–gold–red
+  labs(
+    title = "PCA (colored by PC1): Top 10K Most Variable CpGs",
+    x = sprintf("PC1 (%.1f%%)", ev[1]),
+    y = sprintf("PC2 (%.1f%%)", ev[2]),
+    color = "PC1 value"
+  ) +
+  theme_minimal(base_size = 16) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 18),
+    legend.position = "right",
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "gray90")
+  )
+ print(p9)
+
+# Save this for presentation later (look good!)
+ggsave("PCA_for_PresentationW3.png", p9, width = 8, height = 6, dpi = 300)
+
+################################################################################
+# FINAL QC REPORT
+################################################################################
+
+cat(" QC PIPELINE COMPLETE! \n")
+
+
+cat("QC Summary:\n")
+cat("≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠\n")
+cat("Starting:    485,577 probes × 352 samples\n")
+cat("Step 1:      Filtered to to Tumor Samples Only", ncol(beta_final), "tumor samples\n")
+cat("Step 2:      Remove Probes with High Missing Values\n")
+cat("Step 3:      Remove SNP-Associated Probes\n")
+cat("Step 4:      Remove X-Reactive Probes\n")
+cat("Step 5:      Remove Sex Chromosome Probes\n")
+cat("Step 6:      BMIQ normalized\n")
+cat("Step 7:      Additional Sanitization\n")
+cat("Step 8:      Variance for Top 10,000 Most Variable Probes\n")
+cat("Step 9:      A Visualization with Principal Component Analysis\n")
+cat("≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠\n")
+cat("FINAL:      ", nrow(beta_final), "probes ×", ncol(beta_final), "samples\n")
+cat("Missing:    ", sum(is.na(beta_final)), 
+    "(", round(100*sum(is.na(beta_final))/length(beta_final), 2), "%)\n")
+cat("≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠\n\n")
+
+################################################################################
+# SAVE CLEAN DATA
+################################################################################
+
+cat("Save Clean Methylation data\n")
+
+# Save sample names
+write.table(colnames(beta_final),
+            "qc_sample_names.txt",
+            quote = FALSE, row.names = FALSE, col.names = FALSE)
+cat("✅ Saved: qc_sample_names.txt\n\n")
+
+# Create QC report
+qc_report <- data.frame(
+  step = c("Raw data", "Tumor samples", "Missing filter", "SNP filter", 
+           "Cross-reactive", "Sex chromosomes", "Top 10K variable"),
+  n_probes = c(485577, nrow(beta_values), NA, NA, NA, NA, nrow(beta_final)),
+  n_samples = c(352, ncol(beta_final), ncol(beta_final), ncol(beta_final), 
+                ncol(beta_final), ncol(beta_final), ncol(beta_final))
+)
+
+print(qc_report)
+
+
+# Save it to CSV
+write.csv(qc_report, "qc_report.csv", row.names = FALSE)
+cat("✅  Saved: qc_report.csv\n\n")
+
+################################################################################
+# WEEK 3 COMPLETE!
+################################################################################
+
+
+writeLines(c(
+  "╔═════════════════════════════════════════════════╗",
+  "║     🏆 PIPELINE COMPLETE! 🏆             ║",
+  "╚═════════════════════════════════════════════════╝"
+))
+
+cat("✅  Data Exploration\n")
+cat("✅  Quality Control\n")
+cat("✅  Clinical Vizualizations (~ 8 figures\n")
+cat("✅  Methylation Quality Control\n\n")
+
+cat("Ready for Consensus Clustering!\n\n")
+
+cat("Next steps (least):\n")
+cat("  1. Review all visualizations/\n")
+cat("  2. Review QC results/\n")
+cat("  3. Clustering analysis\n\n")
+
+```
