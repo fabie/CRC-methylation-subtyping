@@ -1,0 +1,40 @@
+### References:
+Jones, P., and Baylin, S. (2007). The Epigenomics of Cancer. Cell Symposia. Volume 128, Issue 4, P683-692
+
+Thorsson et Al. (2018) The Immune Landscape of Cancer. Immunity Resource, Elsevier Inc. 
+https://doi.org/10.1016/j.immuni.2018.03.023
+
+Zhang, Q. (2020). Gene Alterations of N6-Methyladenosine (m6A) Regulators in Colorectal Cancer: A TCGA Database Study. Volume 2020, Article ID 882645. BioMed Research International. Hindawi. 
+https://doi.org/10.1155/2020/8826456
+
+Baylin, S. B. And Jones, P., A. (2011). A decade of exploring the  cancer epigenome - biological and translational implications. Vol. 11. Nature Reviews. Macmillan Publishers Limited.
+
+Ogino, S., Cantor, M., Kawasaki, T., Brahmandam, M., Kirkner, G., J., Weisenberger, D.J., Campan, M., Laird, P. W., Loda, M., and Fuchs, C. S. (2006). CpG island methylator phenotype (CIMP) of colorectal cancer is best characterised by quantitative DNA methylation analysis and prospective cohort studies. Gut 2006; 55:1000–1006
+https://doi: 10.1136/gut.2005.082933
+
+Benfatto, S., Sill, M., David T. W. Jones, D. T.W., Pfister, S. M., Sahm, F., von Deimling, A., Capper, D., and Hovestadt, V. (2025). Explainable artificial intelligence of DNA methylation-based brain tumor diagnostics. 
+https://doi.org/10.1038/s41467-025-57078-00
+
+Colaprico, A., Silva, T., Olsen, C., Garofano, L., Cava, C., Garolini, D., Sabedot, T., S., Malta, T., M., Pagnotta, S., M., Castiglioni, I., Ceccarelli, M., Bontempi, G., and Noushmehr, H. (2015).  TCGAbiolinks: an R/Bioconductor package for integrative analysis of TCGA data. Nucleic Acids Research, 2016, Vol. 44, No. 8 e71. 
+https://doi: 10.1093/nar/gkv1507
+
+Lalchungnunga, H., Hao, W., Maris, J., M., Asgharzadeh, S., Henrich, K., O., Westermann, F., Tweddle, D. A., . Schwalbe, E. C., Strathdee, G. (2022). Genome wide DNA methylation analysis identifies novel molecular subgroups and predicts survival in neuroblastoma. Genetics and Genomics. British Journal of Cancer.
+https://doi: 10.1038/s41416-022-01988-z
+
+Aryee M., J., Jaffe, A., E., Andrew E., Corrada-Bravo, H., Ladd-Acosta, C., Feinberg, A., P., Hansen, K., D., and Irizarri, R., A. (2014). Minfi: a flexible and comprehensive Bioconductor package for the analysis of Infinium DNA methylation microarrays. Genome Analysis. Vol. 30 no. 10. pages 1363–1369. 
+https://doi:10.1093/bioinformatics/btu049
+
+Chen, Y., Mathieu Lemire, M., Choufani, S., Butcher, D., T., Grafodatskaya, D., Zanke, B., W., Gallinger, S., Hudson, T., J., and Weksberg, R. (2013). Discovery of cross-reactive probesand polymorphic CpGs in the Illumina InfiniumHumanMethylation450 microarray. Epigenetics 8:2, 203–209. Landes Bioscience.
+https://doi.org/10.4161/epi.23470
+
+Inoshita, M., Numata, S., Tajima A., Makoto Kinoshita, M., Umehara, H.,  Yamamori H., Ryota Hashimoto, R., Imoto, I., and Tetsuro Ohmori,T. (2015). Sex differences of leukocytes DNA methylation adjusted for estimated cellular proportions. Biology of Sex Difference. 6.11
+https://doi:10.1186/s13293-015-0029-7
+
+Pidsley, R., Wong, C. Y., Volta, M., Lunnon, K., Mill, J., Schalkwyk, L. C. (2023). A data-driven approach to preprocessing Illumina 450K methylation array data. BMC Genomics 14. Art. 293
+http://www.biomedcentral.com/1471-2164/14/293
+
+Zhou, W., Laird, P. W., & Shen, H. (2017). Comprehensive characterization, annotation and innovative use of Infinium DNA methylation BeadChip probes. Nucleic Acids Research, 45(4), e22. 
+https://doi.org/10.1093/nar/gkw967
+
+Human MSA, EPICv2, EPIC+, EPIC, HM450, HM27 Array
+Zhou, W. (n.d.). Infinium annotation. GitHub. https://zwdzwd.github.io/InfiniumAnnotation
