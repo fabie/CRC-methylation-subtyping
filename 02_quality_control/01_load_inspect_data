@@ -1,0 +1,154 @@
+---
+title: "Data Exploration (Phase3)"
+author: "Fabie Van Cappel"
+date: "November 2025"
+output: 
+  pdf_document:
+  latex_engine: xelatex
+toc: true
+number_sections: true
+keep_tex: true
+---
+
+
+```{r}
+################################################################################
+# Week 3: Data Exploration and Pre-processing
+# PHASE 1: Load and Inspect Data
+################################################################################
+
+library(TCGAbiolinks)
+library(SummarizedExperiment)
+library(ggplot2)
+library(dplyr)
+
+# Library: here
+#readRDS(here::here("clinical", "COAD_clinical.rds")) # For portability
+
+# setwd() is not portable
+#setwd("/../TCGA_COAD_Thesis/00_Raw_Data")
+
+
+cat("WEEK 3: DATA EXPLORATION & PRE-PROCESSING\n")
+
+
+# Load all three datasets
+cat("Loading datasets...\n")
+clinical <- readRDS("clinical/COAD_clinical.rds")
+mutation <- readRDS("mutation/COAD_mutation.rds")
+methylation <- readRDS("methylation/COAD_methylation_raw.rds")
+
+cat("✅  All datasets loaded!\n\n")
+
+################################################################################
+# 1. BASIC DATA STRUCTURE
+################################################################################
+
+
+cat("BASIC DATA DIMENSIONS\n")
+
+
+cat(" ⚕️Clinical Data:\n")
+cat("   Rows (patients):", nrow(clinical), "\n")
+cat("   Columns (variables):", ncol(clinical), "\n\n")
+
+cat("🧬 Mutation Data:\n")
+cat("   Rows (mutations):", nrow(mutation), "\n")
+cat("   Columns (annotation):", ncol(mutation), "\n")
+cat("   Unique samples:", length(unique(mutation$Tumor_Sample_Barcode)), "\n\n")
+
+cat("🦠 Methylation Data:\n")
+cat("   Rows (CpG probes):", nrow(methylation), "\n")
+cat("   Columns (samples):", ncol(methylation), "\n")
+cat("   Data type:", class(methylation), "\n\n")
+
+################################################################################
+# 2. SAMPLE OVERLAP
+################################################################################
+
+
+cat("SAMPLE OVERLAP ANALYSIS\n")
+
+
+# Extract patient IDs from each dataset
+clinical_ids <- clinical$bcr_patient_barcode
+mutation_ids <- unique(substr(mutation$Tumor_Sample_Barcode, 1, 12))
+methylation_ids <- unique(substr(colnames(methylation), 1, 12))
+
+cat("Unique patient IDs:\n")
+cat("   Clinical:", length(clinical_ids), "\n")
+cat("   Mutation:", length(mutation_ids), "\n")
+cat("   Methylation:", length(methylation_ids), "\n\n")
+
+# Find overlaps with ids
+clinical_mutation <- intersect(clinical_ids, mutation_ids)
+clinical_methylation <- intersect(clinical_ids, methylation_ids)
+mutation_methylation <- intersect(mutation_ids, methylation_ids)
+all_three <- Reduce(intersect, list(clinical_ids, mutation_ids, methylation_ids))
+
+cat("Sample overlaps:\n")
+cat("   Clinical ∩ Mutation:", length(clinical_mutation), "\n")
+cat("   Clinical ∩ Methylation:", length(clinical_methylation), "\n")
+cat("   Mutation ∩ Methylation:", length(mutation_methylation), "\n")
+cat("   ★ ALL THREE:", length(all_three), "← YOUR CLUSTERING COHORT\n\n")
+
+################################################################################
+# 3. CLINICAL VARIABLES PREVIEW
+################################################################################
+
+
+cat(" ⚕️ CLINICAL VARIABLES PREVIEW\n")
+
+
+cat("Available clinical variables (first 20):\n")
+print(colnames(clinical)[1:20])
+
+cat("\nKey variables for your analysis:\n")
+key_vars <- c("age_at_diagnosis", "gender", "race", "vital_status", 
+              "days_to_death", "days_to_last_followup", "tumor_stage")
+available_key_vars <- key_vars[key_vars %in% colnames(clinical)]
+cat("   Available:", paste(available_key_vars, collapse = ", "), "\n")
+
+################################################################################
+# 4. METHYLATION DATA STRUCTURE
+################################################################################
+
+
+cat("METHYLATION DATA STRUCTURE\n")
+
+
+# Get beta values
+beta_values <- assay(methylation)
+
+cat("Beta value matrix:\n")
+cat("   Dimensions:", nrow(beta_values), "probes ×", ncol(beta_values), "samples\n")
+cat("   Data range: [", round(min(beta_values, na.rm=TRUE), 3), ",", 
+    round(max(beta_values, na.rm=TRUE), 3), "]\n")
+cat("   Missing values:", sum(is.na(beta_values)), 
+    "(", round(100*sum(is.na(beta_values))/length(beta_values), 2), "%)\n\n")
+
+cat("Sample IDs (first 5):\n")
+print(colnames(beta_values)[1:5])
+
+cat("\nProbe IDs (first 5):\n")
+print(rownames(beta_values)[1:5])
+
+
+################################################################################
+# SUMMARY
+################################################################################
+
+
+writeLines(c(
+  "╔════════════════════════════════════════╗",
+  "║     EXPLORATION COMPLETE!              ║",
+  "╚════════════════════════════════════════╝"
+))
+
+
+cat("✅ Your clustering cohort:", length(all_three), "samples\n")
+cat("✅ Methylation probes:", nrow(beta_values), "\n")
+cat("✅ Ready for Quality Control!\n\n")
+
+
+```
