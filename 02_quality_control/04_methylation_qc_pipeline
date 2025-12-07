@@ -234,7 +234,7 @@ cat("After removing X/Y probes:", nrow(beta_values), "probes remain\n")
 sum(anno[rownames(beta_values), "chr"] %in% c("chrX","chrY"), na.rm = TRUE)
 
 ################################################################################
-# STEP 6: BMIQ Normalization
+# STEP 6: Beta-Mixture Quantile (BMIQ) Normalization
 ################################################################################
 
 library(wateRmelon)
