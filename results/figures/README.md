@@ -6,7 +6,7 @@
 
 ### Figure 2: PCA Cluster Visualization
 
-![PCA Clusters](results/figures/fig2_pca_clusters_k3.png)
+![PCA Clusters](https://github.com/fabie/CRC-methylation-subtyping/blob/main/results/figures/fig2_pca_clusters_k3.png?raw=true)
 
 *Figure 2: Principal Component Analysis showing cluster separation in methylation space.*
 
