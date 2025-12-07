@@ -256,6 +256,9 @@ CRC-methylation-subtyping/
 - **Interpretability:** Balancing statistical rigor with biological plausibility—ensuring findings translate to real-world clinical relevance
 
 ---
+## Conclusion
+This proof-of-concept demonstrates that methylation-based clustering could provide objective biomarkers for veteran disability claims, offering molecular evidence where subjective clinical assessments currently fall short. Future work will apply this methodology to exposure-related cancers in veteran populations. Subsequently, we can extend this study to the PACT Act, a landmark for veterans who have been exposed to burn pits, Agent Orange, and other toxins, adding over 20 new presumptive conditions - like specific cancers (brain, G, kidney, lymphoma, etc), respiratory illnesses (athma, COPD, chronic bronchitis, sinusitis, etc), and Monoclonal Gammapathy of Undetermined Significance (MGUS) - for Vietnam, Gulf War, and Post-9/11 Veterans, requiring toxic exposure screenings.
+
 
 ## Future Directions
 
