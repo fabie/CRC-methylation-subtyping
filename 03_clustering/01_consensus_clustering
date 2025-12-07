@@ -1,0 +1,493 @@
+---
+title: "Consensus Clustering Analysis (Phase4)"
+author: "Fabie Van Cappel"
+date: "November 2025"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+toc: true
+number_sections: true
+keep_tex: true
+---
+
+
+```{r Consensus Clustering Analysis}
+
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+install.packages("matrixStats")
+
+# Install matrixStats
+install.packages("matrixStats")
+
+library(matrixStats)
+rowVars(matrix(1:6, nrow = 2))
+
+
+
+# Load packages
+#cat("Checking packages...\n")
+
+
+#if (!requireNamespace("ConsensusClusterPlus", quietly = TRUE)) {
+    #if (!requireNamespace("BiocManager", quietly = TRUE))
+        #install.packages("BiocManager")
+    #BiocManager::install("ConsensusClusterPlus")
+#}
+#library(ConsensusClusterPlus)
+
+#cat("✅  Packages loaded\n\n")
+
+################################################################################
+# WEEK 4: Consensus Clustering - (FIXED VERSION)
+################################################################################
+
+
+#setwd() is not portable
+#setwd("/../TCGA_COAD_Thesis")
+
+
+################################################################################
+# STEP 1: Create All Directories First
+################################################################################
+
+#cat("Creating output directories...\n")
+
+# Create with recursive = TRUE to ensure parent dirs exist
+#dir.create("02_Clustering_Results", recursive = TRUE, showWarnings = FALSE)
+#dir.create("02_Clustering_Results/plots", recursive = TRUE, showWarnings = FALSE)
+
+#cat("✅ Directories created\n\n")
+
+################################################################################
+# STEP 2: Load and Check Data Format
+################################################################################
+
+
+cat("Loading methylation data...\n")
+
+
+meth_raw <- readRDS("00_Raw_Data/methylation/beta_final_dense_for_clustering.rds")
+
+cat("Raw data:\n")
+cat("  Class:", class(meth_raw), "\n")
+cat("  Dim:", nrow(meth_raw), "×", ncol(meth_raw), "\n")
+
+# FIXED -- CRITICAL: Convert to plain numeric matrix
+cat("\nConverting to proper matrix format...\n")
+
+meth_full <- as.matrix(meth_raw)
+class(meth_full) <- "matrix"  # force it to matrix class
+
+# Ensure numeric
+storage.mode(meth_full) <- "numeric"
+
+cat("✓ Converted\n")
+cat("  Class:", class(meth_full), "\n")
+cat("  Type:", typeof(meth_full), "\n\n")
+
+################################################################################
+# STEP 3: Filter to Cohort
+################################################################################
+
+cat("Filtering to cohort...\n")
+
+cohort <- readRDS("00_Raw_Data/01_Processed_Data/cohort_ids_292.rds")
+sample_patients <- substr(colnames(meth_full), 1, 12)
+keep_samples <- sample_patients %in% cohort
+
+meth_cohort <- meth_full[, keep_samples]
+
+cat("✓ Cohort:", ncol(meth_cohort), "samples\n\n")
+
+################################################################################
+# STEP 4: Select Top 10K Variable Probes
+################################################################################
+
+cat("Selecting top 10K variable probes...\n")
+
+# Calculate variance
+var_per_probe <- rowVars(meth_cohort, na.rm = TRUE)
+
+# Check for NA variances
+na_count <- sum(is.na(var_per_probe))
+if(na_count > 0) {
+    cat("Warning:", na_count, "probes have NA variance - removing them\n")
+    valid_probes <- !is.na(var_per_probe)
+    meth_cohort <- meth_cohort[valid_probes, ]
+    var_per_probe <- var_per_probe[valid_probes]
+}
+
+# Select top 10K
+#top_idx <- order(var_per_probe, decreasing = TRUE)[1:10000]
+#meth_10k <- meth_cohort[top_idx, ]
+top_n <- min(10000, nrow(meth_cohort))
+top_idx <- order(var_per_probe, decreasing = TRUE)[1:top_n]
+meth_10k <- meth_cohort[top_idx, ]
+
+
+cat("✅ Selected: 10,000 ×", ncol(meth_10k), "\n\n")
+
+################################################################################
+# STEP 5: Final Data Preparation
+################################################################################
+
+cat("Preparing final data for clustering...\n")
+
+# Ensure it's a clean numeric matrix
+meth_10k <- as.matrix(meth_10k)
+storage.mode(meth_10k) <- "numeric"
+
+# Check for any remaining NAs
+na_total <- sum(is.na(meth_10k))
+if(na_total > 0) {
+    cat("Imputing", na_total, "missing values...\n")
+    for(j in 1:ncol(meth_10k)) {
+        na_idx <- is.na(meth_10k[, j])
+        if(any(na_idx)) {
+            meth_10k[na_idx, j] <- median(meth_10k[, j], na.rm = TRUE)
+        }
+    }
+}
+
+# Final checks
+cat("\nFinal data checks:\n")
+cat("  Dimensions:", nrow(meth_10k), "×", ncol(meth_10k), "\n")
+cat("  Class:", class(meth_10k), "\n")
+cat("  Type:", typeof(meth_10k), "\n")
+cat("  NAs:", sum(is.na(meth_10k)), "\n")
+cat("  Range:", round(min(meth_10k), 3), "to", round(max(meth_10k), 3), "\n")
+cat("  Is matrix:", is.matrix(meth_10k), "\n")
+cat("  Is numeric:", is.numeric(meth_10k), "\n\n")
+
+
+
+cat("✅ Data ready for clustering!\n\n")
+
+# Save
+saveRDS(meth_10k, "00_Raw_Data/01_Processed_Data/methylation_10k_for_clustering.rds")
+
+################################################################################
+# STEP 5.5: Define objects used in clustering loop
+################################################################################
+
+# Use the 10k filtered methylation matrix for clustering
+meth_data  <- meth_10k
+n_samples  <- ncol(meth_data)
+n_probes   <- nrow(meth_data)
+
+################################################################################
+# STEP 6: Consensus Clustering for Multiple k Values
+################################################################################
+
+cat("≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠\n")
+cat("STARTING CONSENSUS CLUSTERING\n")
+cat("≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠\n\n")
+
+cat("Testing k = 2 through k = 10\n")
+cat("1,000 iterations per k (9,000 total)\n")
+cat("80% subsampling\n\n")
+
+cat("⏰ Start:", format(Sys.time()), "\n\n")
+
+start_time <- Sys.time()
+
+# Parameters
+k_values <- 2:10
+n_iterations <- 1000
+subsample_frac <- 0.8
+set.seed(12345)
+
+
+# Store all results
+all_results <- list()
+
+start_total <- Sys.time()
+
+for(k in k_values) {
+    
+    # Testing k   
+    cat("Testing k =", k, "\n")
+    
+    
+    start_k <- Sys.time()
+    
+    # Initialize matrices for this k
+    consensus_mat <- matrix(0, nrow = n_samples, ncol = n_samples)
+    indicator_mat <- matrix(0, nrow = n_samples, ncol = n_samples)
+    
+    # Run iterations
+    for(iter in 1:n_iterations) {
+        
+        if(iter %% 200 == 0) cat("  Iteration", iter, "/", n_iterations, "\n")
+        
+        # Subsample
+        sample_idx <- sample(1:n_samples, size = floor(subsample_frac * n_samples))
+        probe_idx <- sample(1:n_probes, size = floor(subsample_frac * n_probes))
+        
+        # Subset data
+        data_subset <- meth_data[probe_idx, sample_idx]
+        
+        # K-means clustering (transpose so samples are rows)
+        km_result <- kmeans(t(data_subset), centers = k, nstart = 10, iter.max = 100)
+        
+        # Update consensus and indicator matrices
+        for(i in 1:(length(sample_idx)-1)) {
+            for(j in (i+1):length(sample_idx)) {
+                
+                si <- sample_idx[i]
+                sj <- sample_idx[j]
+                
+                # Check if in same cluster
+                if(km_result$cluster[i] == km_result$cluster[j]) {
+                    consensus_mat[si, sj] <- consensus_mat[si, sj] + 1
+                    consensus_mat[sj, si] <- consensus_mat[sj, si] + 1
+                }
+                
+                # Update indicator (counts co-occurrence)
+                indicator_mat[si, sj] <- indicator_mat[si, sj] + 1
+                indicator_mat[sj, si] <- indicator_mat[sj, si] + 1
+            }
+        }
+    }
+    
+    # Calculate consensus proportions
+    consensus_prop <- consensus_mat / indicator_mat
+    consensus_prop[is.nan(consensus_prop)] <- 0
+    diag(consensus_prop) <- 1
+    
+    # Final clustering using hierarchical clustering on consensus matrix
+    consensus_dist <- as.dist(1 - consensus_prop)
+    hc_result <- hclust(consensus_dist, method = "average")
+    final_clusters <- cutree(hc_result, k = k)
+    
+    # Calculate within-cluster consensus (stability metric)
+    within_consensus <- numeric(k)
+    for(cl in 1:k) {
+        samples_in_cl <- which(final_clusters == cl)
+        if(length(samples_in_cl) > 1) {
+            cl_matrix <- consensus_prop[samples_in_cl, samples_in_cl]
+            within_consensus[cl] <- mean(cl_matrix[upper.tri(cl_matrix)])
+        } else {
+            within_consensus[cl] <- 1
+        }
+    }
+    
+    mean_consensus <- mean(within_consensus)
+    
+    # Store results
+    all_results[[paste0("k", k)]] <- list(
+        k = k,
+        consensus_matrix = consensus_prop,
+        clusters = final_clusters,
+        hclust = hc_result,
+        mean_consensus = mean_consensus,
+        cluster_sizes = table(final_clusters)
+    )
+    
+    runtime_k <- difftime(Sys.time(), start_k, units = "secs")
+    
+    cat("✓ k =", k, "complete in", round(runtime_k, 1), "seconds\n")
+    cat("  Mean consensus:", round(mean_consensus, 3), "\n")
+    cat("  Cluster sizes:", paste(table(final_clusters), collapse = ", "), "\n\n")
+}
+
+runtime <- difftime(Sys.time(), start_time, units = "mins")
+
+
+cat("║   ✅ CLUSTERING COMPLETE!              ║\n")
+
+
+cat("⏰ Runtime:", round(runtime, 1), "minutes\n\n")
+
+################################################################################
+# STEP 7: Analyze Optimal k
+################################################################################
+
+
+cat("DETERMINING OPTIMAL K\n")
+
+# Extract consensus scores
+consensus_scores <- data.frame(
+    k = k_values,
+    mean_consensus = sapply(all_results, function(x) x$mean_consensus)
+)
+
+# Calculate delta (change from k to k+1)
+consensus_scores$delta <- c(NA, -diff(consensus_scores$mean_consensus))
+
+cat("Consensus stability by k:\n")
+print(consensus_scores)
+cat("\n")
+
+# Identify optimal k
+optimal_k_consensus <- consensus_scores$k[which.max(consensus_scores$mean_consensus)]
+optimal_k_delta <- consensus_scores$k[which.max(consensus_scores$delta[-1]) + 1]
+
+cat("Suggested optimal k:\n")
+cat("  By consensus stability: k =", optimal_k_consensus, "\n")
+cat("  By delta area: k =", optimal_k_delta, "\n\n")
+
+cat("Based on biological hypothesis: k = 3\n")
+cat("  (Lynch syndrome, CIMP, Sporadic)\n\n")
+
+################################################################################
+# STEP 8: Save Consensus and Scores
+################################################################################
+
+
+saveRDS(all_results, "02_Clustering_Results/consensus_results_complete.rds")
+
+# Save consensus scores
+write.csv(consensus_scores, "02_Clustering_Results/consensus_metrics.csv", row.names = FALSE)
+cat("✅ Consensus metrics saved\n")
+
+# Save cluster assignments for all k
+cluster_assignments <- data.frame(
+    sample_id = colnames(meth_data),
+    patient_id = substr(colnames(meth_data), 1, 12)
+)
+
+for(k in k_values) {
+    cluster_assignments[[paste0("k", k)]] <- all_results[[paste0("k", k)]]$clusters
+}
+
+write.csv(cluster_assignments, "02_Clustering_Results/cluster_assignments_all_k.csv", row.names = FALSE)
+cat("✅ Cluster assignments (all k) saved\n")
+
+# Save k=3 specifically
+clusters_k3 <- data.frame(
+    sample_id = colnames(meth_data),
+    patient_id = substr(colnames(meth_data), 1, 12),
+    cluster = all_results$k3$clusters
+)
+
+write.csv(clusters_k3, "02_Clustering_Results/final_clusters_k3.csv", row.names = FALSE)
+cat("✅ k=3 cluster assignments saved\n\n")
+
+
+################################################################################
+# STEP 9: VISUALIZATIONS 
+################################################################################
+
+# 1. Consensus stability plot
+png("02_Clustering_Results/plots/consensus_stability.png", 
+    width = 10, height = 6, units = "in", res = 300)
+
+plot(consensus_scores$k, consensus_scores$mean_consensus,
+     type = "b", pch = 19, col = "blue", lwd = 2,
+     xlab = "Number of Clusters (k)",
+     ylab = "Mean Within-Cluster Consensus",
+     main = "Consensus Clustering Stability",
+     ylim = c(min(consensus_scores$mean_consensus) * 0.95, 1))
+abline(v = 3, col = "red", lty = 2, lwd = 2)
+text(3, min(consensus_scores$mean_consensus), "k=3\n(selected)", 
+     pos = 4, col = "red", font = 2)
+grid()
+
+dev.off()
+cat("✅  consensus_stability.png\n")
+
+# 2. Delta area plot
+png("02_Clustering_Results/plots/delta_area.png",
+    width = 10, height = 6, units = "in", res = 300)
+
+plot(consensus_scores$k[-1], consensus_scores$delta[-1],
+     type = "b", pch = 19, col = "darkgreen", lwd = 2,
+     xlab = "Number of Clusters (k)",
+     ylab = "Change in Consensus (Delta)",
+     main = "Relative Change in Clustering Stability")
+abline(h = 0, col = "gray50", lty = 2)
+abline(v = 3, col = "red", lty = 2, lwd = 2)
+grid()
+
+dev.off()
+cat("✅  delta_area.png\n")
+
+# 3. Heatmap for k = 3: consensus matrix
+png("02_Clustering_Results/plots/consensus_matrix_k3.png", 
+    width = 10, height = 10, units = "in", res = 300)
+
+cons_mat_k3 <- all_results$k3$consensus_matrix
+clusters_k3_vec <- all_results$k3$clusters
+cluster_order <- order(clusters_k3_vec)
+
+image(1:n_samples, 1:n_samples,
+      cons_mat_k3[cluster_order, cluster_order],
+      col = colorRampPalette(c("white", "yellow", "red", "darkred"))(100),
+      xlab = "Samples", ylab = "Samples",
+      main = "Consensus Matrix (k=3)",
+      axes = FALSE)
+
+# Add cluster boundaries
+boundaries <- cumsum(table(clusters_k3_vec))
+boundaries_lines <- boundaries[-length(boundaries)]
+abline(v = boundaries_lines + 0.5, col = "blue", lwd = 2)
+abline(h = boundaries_lines + 0.5, col = "blue", lwd = 2)
+
+dev.off()
+cat("✅  consensus_matrix_k3.png\n")
+
+# 4. Barplot: cluster sizes
+png("02_Clustering_Results/plots/cluster_sizes_k3.png", 
+    width = 10, height = 6, units = "in", res = 300)
+
+k3_counts <- all_results$k3$cluster_sizes
+
+barplot(k3_counts,
+        col = c("#E69F00", "#56B4E9", "#009E73"),
+        main = "Methylation Cluster Distribution (k=3)",
+        xlab = "Cluster",
+        ylab = "Number of Samples",
+        names.arg = paste0("Cluster ", 1:3, "\n(n=", k3_counts, ")"),
+        ylim = c(0, max(k3_counts) * 1.2),
+        border = "black")
+
+for(i in 1:3) {
+    pct <- round(100 * k3_counts[i] / sum(k3_counts), 1)
+    text((i-1) * 1.2 + 0.5, k3_counts[i] + max(k3_counts) * 0.05,
+         paste0(pct, "%"), font = 2)
+}
+
+dev.off()
+cat("✅  cluster_sizes_k3.png\n\n")
+
+################################################################################
+# FINAL SUMMARY
+################################################################################
+
+
+writeLines(c(
+  "╔══════════════════════════════════════════════════════════╗",
+  "║  ✌️ CONSENSUS CLUSTERING COMPLETE! ✌️                     ║",
+  "╚══════════════════════════════════════════════════════════╝"
+))
+
+
+cat("Results saved in 02_Clustering_Results/:\n")
+cat("─────────────────────────────────────────\n")
+cat("  📊 consensus_results_all_k.rds\n")
+cat("  📊 cluster_assignments_all_k.csv\n")
+cat("  📊 final_clusters_k3.csv\n")
+cat("  📊 consensus_metrics.csv\n")
+cat("  📈 consensus_stability.png\n")
+cat("  📈 delta_area.png\n")
+cat("  📈 consensus_matrix_k3.png\n")
+cat("  📈 cluster_sizes_k3.png\n\n")
+
+cat("Cluster distribution (k=3):\n")
+cat("≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠≠\n")
+for(i in 1:3) {
+    pct <- round(100 * k3_counts[i] / sum(k3_counts), 1)
+    cat("  Cluster", i, ":", k3_counts[i], "samples (", pct, "%)\n")
+}
+cat("\n")
+
+cat("NEXT STEPS:\n")
+cat("  1. ✅ Review consensus matrix heatmap\n")
+cat("  2. ✅ Validate clusters with mutation data\n")
+cat("  3. ✅ Characterize clinical features by cluster\n\n")
+
+cat("🔬 Methylation subtypes successfully identified!\n")
+cat("Manual consensus clustering complete!\n\n")
+
+```
