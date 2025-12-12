@@ -267,7 +267,7 @@ This proof-of-concept establishes the methodological foundation. Next steps incl
 - Integration with exposure history data
 - Development of a classification model for prospective use
 - Early diagnosis for cure and remediation to improve prognosis
-- Will contribute to possibly existing on-going researchs from the U.S. government Dept of Veterans Affairs.
+- Will contribute to possibly existing on-going researchs from the U.S. government Dept of Veterans Affairs
 
 ---
 
